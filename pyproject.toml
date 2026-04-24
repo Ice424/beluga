@@ -1,15 +1,19 @@
 [project]
-name = "musicplayer-flet"
+name = "beluga"
 version = "0.1.0"
 description = ""
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
-    { name = "Flet developer", email = "you@example.com" }
+    { name = "Ice424", email = "you@example.com" }
 ]
 dependencies = [
     "flet>=0.84.0",
-    "python-vlc"
+    "python-vlc",
+    "mpris_server",
+    "mutagen",
+    "aiohttp",
+    "sqlite3"
 ]
 
 [dependency-groups]
@@ -21,9 +25,9 @@ dev = [
 
 [tool.flet]
 desktop_flavor = "light"    # Change to "full" to use flet-audio and flet-video
-org = "com.mycompany"
-product = "musicplayer-flet"
-company = "Flet"
+org = "net.ice424.beluga"
+product = "beluga"
+company = "Ice424"
 copyright = "Copyright (C) 2023-2026 by Flet"
 
 [tool.flet.app]

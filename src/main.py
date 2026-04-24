@@ -1,13 +1,22 @@
 from typing import Any
 import flet as ft
-import os
+from sys import platform
 import asyncio
 
-
+from tools.mpris import MprisController
 from tools.audio_manager import AudioManager
-from ui.playbar import Playbar
+from tools.library_manager import LibraryManager
 
-from tools.mpris import MPRISController
+from ui.playbar import Playbar
+from ui.tracks import TrackView
+
+
+if platform == "linux" or platform == "linux2":
+    LINUX = True
+elif platform == "darwin":
+    MACOS = True
+elif platform == "win32":
+    WINDOWS = True
 
 
 class Main:
@@ -16,18 +25,8 @@ class Main:
         page: ft.Page,
     ):
         self.page = page
-        self.audio = AudioManager(
-            "/home/ice424/Music/Prefer not to say/somewhere, someday, - Tanger, lorem ipsum.flac"
-        )
-        self.mpris = MPRISController(self.audio)
-
-        self.mpris.update_metadata(
-            title="Somewhere Someday",
-            artist="Tanger",
-            album="Prefer Not To Say",
-            art_url="file:///home/user/Music/cover.jpg",
-            length=240,
-        )
+        self.audio = AudioManager()
+        self.library = LibraryManager()
 
         self.playbar = Playbar(page, self.audio)
 
@@ -35,15 +34,17 @@ class Main:
         self.page.window.prevent_close = True
         self.page.window.on_event = self.window_event
 
-        self.build_ui()
-        self.page.run_task(self.mpris_loop)
+        asyncio.create_task(self.library.scan_folder("/home/ice424/Music", observer=self))
         
-    async def mpris_loop(self):
-        while True:
-            self.mpris.update_playback()
-            await asyncio.sleep(0.5)
+        self.build_ui()
+        
+        self.audio.load_file("/home/ice424/Music/We Can Dream - Creo.flac")
+        if LINUX:
+            mpris = MprisController(self.audio)
+            mpris.on_track_change(self.audio.track)
 
     def sidebar_tab(self, icon: ft.IconData, title: str):
+        
         return ft.Container(
             margin=10,
             padding=10,
@@ -57,28 +58,36 @@ class Main:
         )
 
     def build_ui(self):
+        self.page.fonts = {"RobotoMono": "/fonts/RobotoMono-Regular.ttf"}
+        self.page.title = "beluga"
+        self.page.theme = ft.Theme(font_family="RobotoMono")
         self.page.bottom_appbar = ft.BottomAppBar(height=80, content=self.playbar)
         self.page.add(
             ft.SafeArea(
-                ft.Row(
+                expand=True,
+                minimum_padding=0,
+                content=ft.Row(
+                    
                     expand=True,
                     controls=[
-                        ft.ListView(
-                            width=150,
+                        ft.Column(
+                            intrinsic_width=True,
                             controls=[
                                 self.sidebar_tab(
-                                    ft.Icons.FORMAT_LIST_BULLETED_ROUNDED, "Tracks"
+                                    ft.Icons.MY_LIBRARY_BOOKS, "Tracks"
                                 ),
                                 self.sidebar_tab(ft.Icons.ALBUM, "Albums"),
                                 self.sidebar_tab(ft.Icons.PERSON, "Artists"),
                                 self.sidebar_tab(
-                                    ft.Icons.LIBRARY_MUSIC_ROUNDED, "Playlists"
+                                    ft.Icons.LIBRARY_MUSIC, "Playlists"
                                 ),
-                            ],
+                        
+                           ],
                         ),
-                        ft.Text("Main"),
+                        ft.VerticalDivider(width=1),
+                        TrackView(self.library)
                     ],
-                )
+                ),
             )
         )
 
@@ -91,6 +100,12 @@ class Main:
         self.page.pop_dialog()
         self.page.update()
 
+    async def handle_minimise_click(self, e: ft.Event[ft.OutlinedButton]):
+        self.showing_dialog = False
+        self.page.pop_dialog()
+        self.page.update()
+        self.page.show_semantics_debugger = not self.page.show_semantics_debugger
+
     async def window_event(self, e: ft.WindowEvent):
 
         confirm_dialog = ft.AlertDialog(
@@ -99,17 +114,20 @@ class Main:
             content=ft.Text("Do you really want to exit this app?"),
             actions=[
                 ft.Button(content="Yes", on_click=self.handle_yes_click),
-                ft.OutlinedButton(content="Minimise", on_click=self.handle_no_click),
+                ft.OutlinedButton(
+                    content="Minimise", on_click=self.handle_minimise_click
+                ),
                 ft.Button(content="No", on_click=self.handle_no_click),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
         if e.type == ft.WindowEventType.CLOSE and not self.showing_dialog:
-            await self.handle_yes_click(e)
             self.showing_dialog = True
             self.page.show_dialog(confirm_dialog)
             self.page.update()
 
+    def on_library_loaded(self):
+        self.page.show_dialog(ft.SnackBar(ft.Text("Refreshed Library")))
 
 def main(page: ft.Page):
     Main(page)

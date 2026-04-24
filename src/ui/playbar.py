@@ -4,23 +4,42 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tools.audio_manager import AudioManager
+    from tools.track import AutoTrack
 
 
 class Playbar(ft.Row):
     class _SongInfo(ft.Row):
-        def __init__(self) -> None:
+        def __init__(self, audio) -> None:
             super().__init__()
-            self.SongName = "Somewhere Someday"
-            self.ArtistName = "Tanger"
-            self.AlbumName = "Prefer Not To Say"
-            self.expand = True
-            self.controls = [
-                ft.Image(
-                    src="/home/ice424/Downloads/small.jpg",
+            
+            
+            self.SongName = ft.Text(
+                                    "",
+                                    weight=ft.FontWeight.BOLD,
+                                    overflow=ft.TextOverflow.CLIP,
+                                    no_wrap=True
+                                )
+            self.ArtistName = ft.Text(
+                                    "",
+                                    size=10,
+                                    overflow=ft.TextOverflow.CLIP,
+                                    no_wrap=True
+                                )
+            self.AlbumName = ft.Text(
+                                    "",
+                                    size=10,
+                                    overflow=ft.TextOverflow.CLIP,
+                                    no_wrap=True
+                                )
+            self.songCover = ft.Image(
+                    src='<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-music-icon lucide-music"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
                     width=50,
                     height=50,
                     border_radius=6,
-                ),
+                )
+            self.expand = True
+            self.controls = [
+                self.songCover,
                 ft.Stack(
                     expand=True,
                     clip_behavior=ft.ClipBehavior.NONE,
@@ -28,35 +47,24 @@ class Playbar(ft.Row):
                         ft.Column(
                             spacing=0,
                             controls=[
-                                ft.Text(
-                                    self.SongName,
-                                    weight=ft.FontWeight.BOLD,
-                                    overflow=ft.TextOverflow.CLIP,
-                                    no_wrap=True
-                                ),
-                                ft.Text(
-                                    self.ArtistName,
-                                    size=10,
-                                    overflow=ft.TextOverflow.CLIP,
-                                    no_wrap=True
-                                ),
-                                ft.Text(
-                                    self.AlbumName,
-                                    size=10,
-                                    overflow=ft.TextOverflow.CLIP,
-                                    no_wrap=True
-                                ),
+                                self.SongName,
+                                self.ArtistName,
+                                self.AlbumName
                             ],
                         )
                     ],
                 ),
             ]
+        def __repr__(self):
+            return f"<Track title={self.SongName!r} artist={self.ArtistName!r} album={self.AlbumName!r} src={self.songCover.src!r}s>"
 
-    def __init__(self, page: ft.Page, audio_manager: AudioManager) -> None:
+    def __init__(self, page: ft.Page, audio_manager: "AudioManager") -> None:
         super().__init__()
         self.main_page = page
         self.audio = audio_manager
-        self.SongInfo = self._SongInfo()
+        self.audio.subscribe(self)
+        
+        self.SongInfo = self._SongInfo(audio_manager)
         self.saved_audio_value: None | int = None
         
         self.shuffle = False
@@ -92,7 +100,7 @@ class Playbar(ft.Row):
             margin=ft.Margin(left=10, right=0),
         )
         self.volume_slider = ft.Slider(
-            on_change=self.on_volume_change,
+            on_change=self.on_volume_slider_change,
             label="{value}%",
             max=100,
             min=0,
@@ -150,7 +158,7 @@ class Playbar(ft.Row):
                 ),
             ),
         ]
-        self.on_volume_change(None)
+        self.on_volume_slider_change(None)
         self._updating = True
         asyncio.create_task(self.update_position())
 
@@ -198,7 +206,7 @@ class Playbar(ft.Row):
         new_pos = self.scrubber.value / 100 * dur
         self.audio.set_position(new_pos)
 
-    def on_volume_change(self, e: ft.Event[ft.Slider]):
+    def on_volume_slider_change(self, e: ft.Event[ft.Slider]):
         self.saved_audio_value = None
         self.audio.set_volume(int(self.volume_slider.value))
 
@@ -213,13 +221,13 @@ class Playbar(ft.Row):
         if self.saved_audio_value:
 
             self.volume_slider.value = self.saved_audio_value
-            self.on_volume_change(e)
+            self.on_volume_slider_change(e)
 
         else:
-            saved_vol = self.volume_slider.value
+            saved_vol = int(self.volume_slider.value)
 
             self.volume_slider.value = 0
-            self.on_volume_change(e)
+            self.on_volume_slider_change(e)
 
             self.saved_audio_value = saved_vol
 
@@ -248,5 +256,24 @@ class Playbar(ft.Row):
             self.loop = 0
             self.loop_button.icon = ft.Icons.REPEAT_ROUNDED
             self.loop_button.icon_color = None
-            
+    
+    def on_state_change(self, is_playing: bool):
+        self.play_button.icon = ft.Icons.PAUSE_CIRCLE_FILLED_ROUNDED if self.audio.is_playing else ft.Icons.PLAY_CIRCLE_FILLED_ROUNDED
+        pass
+
+    def on_track_change(self, track: "AutoTrack"):
+        
+        self.SongInfo.SongName.value = str(track.title)
+        self.SongInfo.ArtistName.value = str(track.artist)
+        self.SongInfo.AlbumName.value = str(track.album)
+        self.SongInfo.songCover.src = str(track.cover_path)
+        self.SongInfo.update()
+    
+    def on_position_change(self, position: float):
+        # Update MPRIS position
+        pass
+
+    def on_volume_change(self, volume: int):
+        # Optional: sync MPRIS volume
+        pass
             

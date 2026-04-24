@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "pyside",
+			"action": "build",
+			"group": "build",
+			"problemMatcher": [],
+			"label": "PySide: build",
+			"detail": "pyside6-project build"
+		}
+	]
+}
