@@ -6,6 +6,7 @@ import asyncio
 from tools.mpris import MprisController
 from tools.audio_manager import AudioManager
 from tools.library_manager import LibraryManager
+from tools.presence import PresenceManager
 
 from ui.playbar import Playbar
 from ui.tracks import TrackView
@@ -26,8 +27,10 @@ class Main:
     ):
         self.page = page
         self.audio = AudioManager()
+        self.presance = PresenceManager(self.audio)
+        
         self.library = LibraryManager()
-
+        
         self.playbar = Playbar(page, self.audio)
 
         self.showing_dialog = False
@@ -35,10 +38,11 @@ class Main:
         self.page.window.on_event = self.window_event
 
         asyncio.create_task(self.library.scan_folder("/home/ice424/Music", observer=self))
+        page.run_task(self.presance.update_loop)
         
         self.build_ui()
         
-        self.audio.load_file("/home/ice424/Music/We Can Dream - Creo.flac")
+        self.audio.load_file("/home/ice424/Music/Prefer not to say/depressed hermit girl touches grass - Tanger, ISSBROKIE.flac")
         if LINUX:
             mpris = MprisController(self.audio)
             mpris.on_track_change(self.audio.track)

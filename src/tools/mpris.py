@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from audio_manager import AudioManager
-    from tools.track import AutoTrack as TR
+    from tools.track import Track as TR
 
 
 class MprisPlayer(MprisAdapter):
@@ -167,11 +167,11 @@ class MprisController:
         pass
 
     def on_track_change(self, track: "TR"):
-        self.player.data["xesam:title"] = str(track.title)
-        self.player.data["xesam:album"] = str(track.album)
-        self.player.data["xesam:artist"] = [str(track.artist)]
-        self.player.data["mpris:artUrl"] = "file:///" + str(track.cover_path)
-        self.player.data["mpris:length"] = int(track.duration * 1000000)
+        self.player.data["xesam:title"] = str(track.title) # type: ignore
+        self.player.data["xesam:album"] = str(track.album) # type: ignore
+        self.player.data["xesam:artist"] = [str(track.artist)] # type: ignore
+        self.player.data["mpris:artUrl"] = "file:///" + str(track.cover_path) # type: ignore
+        self.player.data["mpris:length"] = int(track.duration * 1000000) # type: ignore
         self.event_handler.on_title()
       
     def on_position_change(self, position: float):
@@ -179,5 +179,5 @@ class MprisController:
         pass
 
     def on_volume_change(self, volume: int):
-        # Optional: sync MPRIS volume
+
         pass

@@ -18,6 +18,7 @@
         "TPOS",
         "tracknumber",
         "TRCK",
-        "trkn"
+        "trkn",
+        "xesam"
     ]
 }

@@ -7,28 +7,32 @@ from tools.track import Track
 class AudioManager:
     def __init__(self, audio_file: str | None = None):
         self.audio_file = audio_file
-    
-        self.vlc_instance: vlc.EventManager = vlc.Instance()
-        if not self.vlc_instance:
-            raise
-     
-        self.player = self.vlc_instance.media_player_new()
-        if audio_file:
-            media = self.vlc_instance.media_new(audio_file)
-            self.player.set_media(media)
-        
+        self._observers = []
         self.saved_audio_value = None
         self.is_playing = False
         self.track: Track | None = None
         
-        self._observers = []
+        self.vlc_instance: vlc.EventManager = vlc.Instance()
+        if not self.vlc_instance:
+            raise
+            
+        self.player = self.vlc_instance.media_player_new()
+        if audio_file:
+            self.load_file(audio_file)
+        
+
+        
+        
         
     def subscribe(self, observer):
         self._observers.append(observer)
 
     def _notify(self, event_name: str, **kwargs):
         for obs in self._observers:
-            getattr(obs, f"on_{event_name}")(**kwargs)
+            try:
+                getattr(obs, f"on_{event_name}")(**kwargs)
+            except:
+                pass
         
 
     def load_file(self, file):
