@@ -14,7 +14,6 @@ Run as a desktop app:
 flet run
 ```
 
-For more details on building macOS package, refer to the [macOS Packaging Guide](https://flet.dev/docs/publish/macos/).
 
 ### Linux
 
@@ -30,4 +29,4 @@ For more details on building Linux package, refer to the [Linux Packaging Guide]
 flet build windows -v
 ```
 
-due to using vlc as a backed this project does not work on web and is untested on macos and mobile
+due to using vlclib as a backed this project does not work on web and is untested on macos and mobile
