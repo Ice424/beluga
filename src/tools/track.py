@@ -3,8 +3,9 @@ import base64
 import hashlib
 import re
 
-from dataclasses import dataclass, field
+import acoustid as aid
 
+from dataclasses import dataclass, field
 
 from pathlib import Path
 from mutagen import File
@@ -36,6 +37,8 @@ class Track:
         file_size: Optional[int] = None,
         modified_at: Optional[int] = None,
         file_hash: Optional[str] = None,
+        chromaprint: Optional[bytes] = None,
+        musicbrainz_id: Optional[str] = None
     ):
         self.file_path = file_path
         self.title = title
@@ -51,6 +54,9 @@ class Track:
         self.file_size = file_size
         self.modified_at = modified_at
         self.file_hash = file_hash
+        
+        self._chromaprint = chromaprint
+        self.musicbrainz_id = musicbrainz_id
 
     @classmethod
     def from_file(cls, file_path: str) -> "Track":
@@ -71,6 +77,7 @@ class Track:
             track.album = audio.get("album", [None])[0]
             track.tracknumber = cls._parse_number(audio.get("tracknumber", [None])[0])
             track.discnumber = cls._parse_number(audio.get("discnumber", [None])[0])
+            track.musicbrainz_id = audio.get("musicbrainz_recordingid", [None])[0]
 
         elif isinstance(audio.tags, ID3):
             track.title = cls._id3(audio, "TIT2")
@@ -78,6 +85,7 @@ class Track:
             track.album = cls._id3(audio, "TALB")
             track.tracknumber = cls._parse_number(cls._id3(audio, "TRCK"))
             track.discnumber = cls._parse_number(cls._id3(audio, "TPOS"))
+            track.musicbrainz_id = cls._id3(audio, "TXXX:MusicBrainz Recording Id")
 
         elif isinstance(audio, MP4):
             track.title = cls._mp4(audio, "\xa9nam")
@@ -123,6 +131,7 @@ class Track:
             discnumber=row.get("disc_number"),
             cover_path=row.get("cover_path"),
             file_hash=row.get("hash"),
+            chromaprint=row.get("chromaprint")
         )
     
     
@@ -255,6 +264,19 @@ class Track:
             f"<Track title={self.title!r} artist={self.artist!r} "
             f"album={self.album!r} duration={self.duration:.1f}s>"
         )
+
+    @property
+    def chromaprint(self):
+        if self._chromaprint:
+            return self._chromaprint
+        else:
+            self._chromaprint = aid.fingerprint_file(self.file_path)[1]
+            return self._chromaprint
+    
+    @chromaprint.setter
+    def set_acoustid(self, value):
+        self._chromaprint = value
+        
 
 
 

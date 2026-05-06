@@ -1,5 +1,6 @@
 from typing import Any
 import flet as ft
+import os
 from sys import platform
 import asyncio
 
@@ -12,12 +13,14 @@ from ui.playbar import Playbar
 from ui.tracks import TrackView
 
 
-if platform == "linux" or platform == "linux2":
+if "linux" in platform: 
     LINUX = True
+    os.environ["FPCALC"] = os.path.abspath("./bin/fpcalc")
 elif platform == "darwin":
-    MACOS = True
+    exit()
 elif platform == "win32":
     WINDOWS = True
+    os.environ["FPCALC"] = os.path.abspath("./bin/fpcalc.exe")
 
 
 class Main:
@@ -42,7 +45,7 @@ class Main:
         
         self.build_ui()
         
-        self.audio.load_file("/home/ice424/Music/Prefer not to say/depressed hermit girl touches grass - Tanger, ISSBROKIE.flac")
+        #self.audio.load_file("/home/ice424/Music/Prefer not to say/depressed hermit girl touches grass - Tanger, ISSBROKIE.flac")
         if LINUX:
             mpris = MprisController(self.audio)
             mpris.on_track_change(self.audio.track)
@@ -58,7 +61,7 @@ class Main:
             border_radius=10,
             ink=True,
             content=ft.Row(controls=[ft.Icon(icon), ft.Text(title)]),
-            on_click=lambda e: print("Clickable transparent with Ink clicked!"),
+            on_click=lambda e: self.audio.load_file("/home/ice424/Music/Pictured as Perfect.mp3"),
         )
 
     def build_ui(self):
@@ -71,7 +74,6 @@ class Main:
                 expand=True,
                 minimum_padding=0,
                 content=ft.Row(
-                    
                     expand=True,
                     controls=[
                         ft.Column(
@@ -132,6 +134,10 @@ class Main:
 
     def on_library_loaded(self):
         self.page.show_dialog(ft.SnackBar(ft.Text("Refreshed Library")))
+        asyncio.create_task(self.library.update_fingerprints("/home/ice424/Music", observer=self))
+        
+    def on_fingerprints_loaded(self):
+        self.page.show_dialog(ft.SnackBar(ft.Text("Fingerprinted files")))
 
 def main(page: ft.Page):
     Main(page)

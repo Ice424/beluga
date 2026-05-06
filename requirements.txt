@@ -1,0 +1,7 @@
+flet
+asyncio
+mutagen
+pathlib
+aiohttp
+python-vlc
+pyacoustid

@@ -2,6 +2,7 @@ import sqlite3
 import os
 import hashlib
 import asyncio
+
 from pathlib import Path
 from tools.track import Track
 
@@ -73,6 +74,7 @@ class LibraryManager:
         duration REAL,
         track_number INTEGER,
         disc_number INTEGER,
+        chromaprint BLOB,
 
         FOREIGN KEY(album_id) REFERENCES albums(id),
         FOREIGN KEY(cover_id) REFERENCES covers(id)
@@ -146,15 +148,30 @@ class LibraryManager:
 
         self.conn.commit()
         
-        getattr(observer, "on_library_loaded")()
-        print("Done from library manager")
+        if observer:
+            
+            getattr(observer, "on_library_loaded")()
+            
+    async def update_fingerprints(self, folder: str, observer):
+        tracks = tuple(self.get_tracks())
+        alert = False
+        for track in  tracks:
+            if not track._chromaprint:
+                print(track.title)
+                alert = True
+                self.add_chromaprint(track.chromaprint, track.file_hash)
+        
+        self.conn.commit()
+        print("Updated Chromaprints")
+        if observer and alert:
+            getattr(observer, "on_fingerprints_loaded")()
+        
         
     def add_track(self, file_path: str):
         exists, file_hash = self.track_exists(file_path)
         if exists:
             return
         track = Track.from_file(file_path)
-
         
         cover_id = self.get_cover_id(track.cover_hash)
 
@@ -162,6 +179,8 @@ class LibraryManager:
         album_id = self.get_album_id(track.album)
         self.link_album_artist(album_id, artist_id)
 
+        
+        
         track_id = self.insert_track(
             track.title,
             file_path,
@@ -180,6 +199,7 @@ class LibraryManager:
                 if artist != track.artist:
                     artist_id = self.get_artist_id(artist)
                     self.link_track_artist(track_id, artist_id)
+        print(track)
 
     def track_exists(self, file_path) -> tuple[bool, str]:
         hash = hash_file(file_path)
@@ -242,7 +262,7 @@ class LibraryManager:
         )
 
     def insert_track(
-        self, title, path, album_id, duration, track_no, disc_no, file_hash, cover_id
+        self, title, path, album_id, duration, track_no, disc_no, file_hash, cover_id 
     ):
 
         self.cur.execute(
@@ -254,6 +274,19 @@ class LibraryManager:
             (title, path, album_id, duration, track_no, disc_no, file_hash, cover_id),
         )
         return self.cur.lastrowid
+    
+    def add_chromaprint(
+        self, chromaprint, hash
+    ):
+        self.cur.execute(
+            """
+            UPDATE tracks
+            SET chromaprint = ?
+            WHERE hash = ?
+            """,
+            (chromaprint, hash,)
+            
+        )
 
     def get_cover_id(self, cover_hash):
 
@@ -290,7 +323,7 @@ class LibraryManager:
             LEFT JOIN track_artists ta ON t.id = ta.track_id
             LEFT JOIN artists a ON ta.artist_id = a.id
             GROUP BY t.id
-            ORDER BY {order} {direction}
+            ORDER BY {order} COLLATE NOCASE {direction}
         """
 
         rows = self.cur.execute(query).fetchall()
@@ -322,6 +355,3 @@ def hash_file(file_path, block_size=65536):
             h.update(f.read(block_size))
         return h.hexdigest()
 
-
-#LM = LibraryManager()
-#LM.scan_folder("/home/ice424/Music")

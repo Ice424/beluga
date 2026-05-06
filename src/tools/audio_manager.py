@@ -31,7 +31,7 @@ class AudioManager:
         for obs in self._observers:
             try:
                 getattr(obs, f"on_{event_name}")(**kwargs)
-            except:
+            except Exception:
                 pass
         
 

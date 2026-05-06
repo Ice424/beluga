@@ -160,13 +160,14 @@ class Playbar(ft.Row):
         ]
         self.on_volume_slider_change(None)
         self._updating = True
-        asyncio.create_task(self.update_position())
+        self.update_task = asyncio.create_task(self.update_position())
 
     async def update_position(self):
         while self._updating:
             try:
                 self.audio.test_file()
-            except:
+            except Exception:
+                self._updating = False
                 continue
             pos = self.audio.get_position()
             dur = self.audio.get_duration()
@@ -190,6 +191,10 @@ class Playbar(ft.Row):
             self.play_button.icon = ft.Icons.PLAY_CIRCLE_FILLED_ROUNDED
 
         pass
+        if  self.update_task.done:
+            self._updating = True
+            self.update_task = asyncio.create_task(self.update_position())
+        
 
     def on_volume_hover(self, e: ft.Event[ft.Container]):
         if e.data:
@@ -259,15 +264,24 @@ class Playbar(ft.Row):
     
     def on_state_change(self, is_playing: bool):
         self.play_button.icon = ft.Icons.PAUSE_CIRCLE_FILLED_ROUNDED if self.audio.is_playing else ft.Icons.PLAY_CIRCLE_FILLED_ROUNDED
+        if  self.update_task.done:
+            self._updating = True
+            self.update_task = asyncio.create_task(self.update_position())
         pass
 
     def on_track_change(self, track: "AutoTrack"):
+        if track:
+            self.SongInfo.SongName.value = str(track.title)
+            self.SongInfo.ArtistName.value = str(track.artist)
+            self.SongInfo.AlbumName.value = str(track.album)
+            self.SongInfo.songCover.src = str(track.cover_path)
+            self.SongInfo.update()
+            if  self.update_task.done:
+                self._updating = True
+                self.update_task = asyncio.create_task(self.update_position())
+        else:
+            self._updating = False
         
-        self.SongInfo.SongName.value = str(track.title)
-        self.SongInfo.ArtistName.value = str(track.artist)
-        self.SongInfo.AlbumName.value = str(track.album)
-        self.SongInfo.songCover.src = str(track.cover_path)
-        self.SongInfo.update()
     
     def on_position_change(self, position: float):
         # Update MPRIS position

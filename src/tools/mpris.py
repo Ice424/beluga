@@ -18,14 +18,18 @@ class MprisPlayer(MprisAdapter):
 
 
         self.data = Metadata()
-        self.data["xesam:title"] = "Test Track"
-        self.data["xesam:album"] = "Test Album"
-        self.data["xesam:artist"] = ["Test Artist"]
+        self.data["xesam:title"] = "Not Playing"
+        self.data["xesam:album"] = ""
+        self.data["xesam:artist"] = ["Beluga"]
 
     
 
     def play(self):
-        self.audio.play()
+        try:
+            self.audio.play()
+        except FileNotFoundError:
+            pass
+            
 
     def pause(self):
         self.audio.pause()
@@ -167,12 +171,13 @@ class MprisController:
         pass
 
     def on_track_change(self, track: "TR"):
-        self.player.data["xesam:title"] = str(track.title) # type: ignore
-        self.player.data["xesam:album"] = str(track.album) # type: ignore
-        self.player.data["xesam:artist"] = [str(track.artist)] # type: ignore
-        self.player.data["mpris:artUrl"] = "file:///" + str(track.cover_path) # type: ignore
-        self.player.data["mpris:length"] = int(track.duration * 1000000) # type: ignore
-        self.event_handler.on_title()
+        if track:
+            self.player.data["xesam:title"] = str(track.title) # type: ignore
+            self.player.data["xesam:album"] = str(track.album) # type: ignore
+            self.player.data["xesam:artist"] = [str(track.artist)] # type: ignore
+            self.player.data["mpris:artUrl"] = "file:///" + str(track.cover_path) # type: ignore
+            self.player.data["mpris:length"] = int(track.duration * 1000000) # type: ignore
+            self.event_handler.on_title()
       
     def on_position_change(self, position: float):
         self.event_handler.on_seek(Position(position * 1000000))
