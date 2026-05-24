@@ -5,3 +5,7 @@ pathlib
 aiohttp
 python-vlc
 pyacoustid
+mpris_server
+pypresence
+chromaprint
+audioread

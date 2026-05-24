@@ -49,19 +49,31 @@ class ListView(ft.ListView):
         self.controls = [self.header]
 
     def build_header(self, views: list[view]) -> ft.Row:
-        labels = {
-            "track_number": "#",
-            "title": "Title",
-            "album": "Album",
-            "duration": "duration",
-            "add_playlist": "",
-            "add_queue": "",
-        }
+        class HeaderElement(ft.Text):
+            def __init__(self) -> None:
+                super().__init__()
+                self.value = "#"
+                self.text_align = ft.TextAlign.LEFT
 
+                
+        
+        labels = {
+            "track_number": [HeaderElement, "#"],
+            "title": [HeaderElement, "Title"],
+            "album": [HeaderElement, "Album"],
+            "duration": [HeaderElement, "Duration"],
+            "add_playlist": [HeaderElement, ""],
+            "add_queue": [HeaderElement,""],
+        }
+        
+        controls = []
+        for v in views:
+            control = labels[v][0]()
+            control.value = labels[v][1]
+            controls.append(control)
+        
         return ft.Row(
-            controls=[
-                ft.Text(labels[v], weight=ft.FontWeight.BOLD, expand=1) for v in views
-            ]
+            controls=controls
         )
 
 
@@ -92,17 +104,12 @@ class Header(ft.Container):
             menu_position=ft.PopupMenuPosition.UNDER,
         )
         self.search_bar = search_bar(self)
-        self.search = ft.KeyboardListener(
-            content = self.search_bar,
-            on_key_down= self.search_bar.show_search,
-            autofocus=True
-        )
         
 
         self.row = ft.Row(
             alignment=ft.MainAxisAlignment.END,
             height=70,
-            controls=[list_view_button, grid_view_button, sort_view, self.search],
+            controls=[list_view_button, grid_view_button, sort_view],
         )
         self.content = self.row
 

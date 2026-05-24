@@ -3,10 +3,10 @@ import base64
 import hashlib
 import re
 
+
 import acoustid as aid
 
 from dataclasses import dataclass, field
-
 from pathlib import Path
 from mutagen import File
 from mutagen.flac import FLAC
@@ -18,7 +18,10 @@ from typing import TYPE_CHECKING, Optional, Any
 
 if TYPE_CHECKING:
     from tools.library_manager import LibraryManager
-    
+
+
+
+
 @dataclass
 class Track:
     COVER_CACHE = Path.home() / ".cache/beluga/covers"
@@ -32,7 +35,7 @@ class Track:
         tracknumber: Optional[int] = None,
         discnumber: Optional[int] = None,
         duration: Optional[float] = None,
-        cover_path: Optional[str] = None,
+        cover_path: Optional[Path] = None,
         cover_hash: Optional[str] = None,
         file_size: Optional[int] = None,
         modified_at: Optional[int] = None,
@@ -55,7 +58,7 @@ class Track:
         self.modified_at = modified_at
         self.file_hash = file_hash
         
-        self._chromaprint = chromaprint
+        self.chromaprint = chromaprint
         self.musicbrainz_id = musicbrainz_id
 
     @classmethod
@@ -77,7 +80,7 @@ class Track:
             track.album = audio.get("album", [None])[0]
             track.tracknumber = cls._parse_number(audio.get("tracknumber", [None])[0])
             track.discnumber = cls._parse_number(audio.get("discnumber", [None])[0])
-            track.musicbrainz_id = audio.get("musicbrainz_recordingid", [None])[0]
+            track.musicbrainz_id = audio.get("musicbrainz_trackid", [None])[0]
 
         elif isinstance(audio.tags, ID3):
             track.title = cls._id3(audio, "TIT2")
@@ -129,7 +132,8 @@ class Track:
             duration=row.get("duration"),
             tracknumber=row.get("track_number"),
             discnumber=row.get("disc_number"),
-            cover_path=row.get("cover_path"),
+            cover_path= cls.COVER_CACHE / f"{row.get("cover_hash")}.jpg",
+            cover_hash=row.get("cover_hash"),
             file_hash=row.get("hash"),
             chromaprint=row.get("chromaprint")
         )
@@ -265,17 +269,18 @@ class Track:
             f"album={self.album!r} duration={self.duration:.1f}s>"
         )
 
-    @property
-    def chromaprint(self):
-        if self._chromaprint:
-            return self._chromaprint
+    async def generate_chromaprint(self):
+        if self.chromaprint:
+            return self.chromaprint
         else:
-            self._chromaprint = aid.fingerprint_file(self.file_path)[1]
-            return self._chromaprint
+            try:
+                self.chromaprint = aid.fingerprint_file(self.file_path)[1]
+            except Exception as e:
+                print(f"Failed to fingerprint file {self.file_path}, {e}")
+                self.chromaprint = ""
+            return self.chromaprint
     
-    @chromaprint.setter
-    def set_acoustid(self, value):
-        self._chromaprint = value
+
         
 
 

@@ -8,12 +8,20 @@ authors = [
     { name = "Ice424", email = "you@example.com" }
 ]
 dependencies = [
-    "flet>=0.84.0",
+    "flet>=0.85.0",
     "python-vlc",
     "mpris_server",
     "mutagen",
     "aiohttp",
-    "sqlite3"
+    "asyncio",
+    "mutagen",
+    "pathlib",
+    "aiohttp",
+    "pyacoustid",
+    "mpris_server",
+    "pypresence",
+    "chromaprint",
+    "audioread"
 ]
 
 [dependency-groups]

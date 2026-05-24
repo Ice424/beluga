@@ -28,18 +28,15 @@ class LibraryManager:
 
     def sql_setup(self):
 
-        self.cur.execute(
-            """
+        self.cur.execute("""
         CREATE TABLE artists (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
         sort_name TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-        """
-        )
-        self.cur.execute(
-            """
+        """)
+        self.cur.execute("""
         CREATE TABLE albums (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
@@ -49,10 +46,8 @@ class LibraryManager:
         
         FOREIGN KEY(cover_id) REFERENCES covers(id)
         );
-        """
-        )
-        self.cur.execute(
-            """CREATE TABLE album_artists (
+        """)
+        self.cur.execute("""CREATE TABLE album_artists (
         album_id INTEGER,
         artist_id INTEGER,
     
@@ -60,10 +55,8 @@ class LibraryManager:
     
         FOREIGN KEY(album_id) REFERENCES albums(id) ON DELETE CASCADE,
         FOREIGN KEY(artist_id) REFERENCES artists(id) ON DELETE CASCADE
-        );"""
-        )
-        self.cur.execute(
-            """
+        );""")
+        self.cur.execute("""
         CREATE TABLE tracks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
@@ -74,16 +67,18 @@ class LibraryManager:
         duration REAL,
         track_number INTEGER,
         disc_number INTEGER,
+        release_id TEXT,
         chromaprint BLOB,
+        musicbrainz_id TEXT,
+        
+        
 
         FOREIGN KEY(album_id) REFERENCES albums(id),
         FOREIGN KEY(cover_id) REFERENCES covers(id)
         );  
-        """
-        )
+        """)
 
-        self.cur.execute(
-            """
+        self.cur.execute("""
             CREATE TABLE track_artists (
             track_id INTEGER,
             artist_id INTEGER,
@@ -94,30 +89,24 @@ class LibraryManager:
             FOREIGN KEY(track_id) REFERENCES tracks(id) ON DELETE CASCADE,
             FOREIGN KEY(artist_id) REFERENCES artists(id) ON DELETE CASCADE
             );
-            """
-        )
+            """)
 
-        self.cur.execute(
-            """
+        self.cur.execute("""
             CREATE TABLE covers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                hash TEXT UNIQUE
+                cover_hash TEXT UNIQUE
             )
-            """
-        )
+            """)
 
-        self.cur.execute(
-            """
+        self.cur.execute("""
             CREATE TABLE playlists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-            """
-        )
+            """)
 
-        self.cur.execute(
-            """
+        self.cur.execute("""
             CREATE TABLE playlist_tracks (
             playlist_id INTEGER,
             track_id INTEGER,
@@ -129,8 +118,7 @@ class LibraryManager:
             FOREIGN KEY(playlist_id) REFERENCES playlists(id) ON DELETE CASCADE,
             FOREIGN KEY(track_id) REFERENCES tracks(id) ON DELETE CASCADE
             );
-            """
-        )
+            """)
         self.conn.commit()
 
     async def scan_folder(self, folder: str, observer):
@@ -140,47 +128,44 @@ class LibraryManager:
         for path in Path(folder).rglob("*"):
             if path.suffix.lower() in music_ext:
                 try:
-                    await loop.run_in_executor(
-                    None, self.add_track, str(path)
-                )
+                    await loop.run_in_executor(None, self.add_track, str(path))
                 except Exception as e:
                     print("Failed:", path, e)
 
         self.conn.commit()
-        
+
         if observer:
-            
+
             getattr(observer, "on_library_loaded")()
-            
+
     async def update_fingerprints(self, folder: str, observer):
         tracks = tuple(self.get_tracks())
         alert = False
-        for track in  tracks:
-            if not track._chromaprint:
-                print(track.title)
+        for track in tracks:
+            if not track.chromaprint:
                 alert = True
-                self.add_chromaprint(track.chromaprint, track.file_hash)
-        
+                chromaprint = await track.generate_chromaprint()
+                self.add_chromaprint(chromaprint, track.file_hash)
+
         self.conn.commit()
         print("Updated Chromaprints")
         if observer and alert:
             getattr(observer, "on_fingerprints_loaded")()
-        
-        
+
     def add_track(self, file_path: str):
         exists, file_hash = self.track_exists(file_path)
         if exists:
             return
         track = Track.from_file(file_path)
-        
+
         cover_id = self.get_cover_id(track.cover_hash)
 
         artist_id = self.get_artist_id(track.artist)
         album_id = self.get_album_id(track.album)
         self.link_album_artist(album_id, artist_id)
 
-        
-        
+        release_id = track.musicbrainz_id
+
         track_id = self.insert_track(
             track.title,
             file_path,
@@ -190,6 +175,7 @@ class LibraryManager:
             track.discnumber,
             file_hash,
             cover_id,
+            release_id,
         )
 
         self.link_track_artist(track_id, artist_id)
@@ -199,7 +185,6 @@ class LibraryManager:
                 if artist != track.artist:
                     artist_id = self.get_artist_id(artist)
                     self.link_track_artist(track_id, artist_id)
-        print(track)
 
     def track_exists(self, file_path) -> tuple[bool, str]:
         hash = hash_file(file_path)
@@ -228,7 +213,7 @@ class LibraryManager:
 
         return self.cur.lastrowid
 
-    def get_album_id(self,album_name):
+    def get_album_id(self, album_name):
         if not album_name:
             album_name = "Unknown Album"
 
@@ -262,46 +247,65 @@ class LibraryManager:
         )
 
     def insert_track(
-        self, title, path, album_id, duration, track_no, disc_no, file_hash, cover_id 
+        self,
+        title,
+        path,
+        album_id,
+        duration,
+        track_no,
+        disc_no,
+        file_hash,
+        cover_id,
+        release_id,
     ):
 
         self.cur.execute(
             """
             INSERT INTO tracks
-            (title, path, album_id, duration, track_number, disc_number, hash, cover_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (title, path, album_id, duration, track_number, disc_number, hash, cover_id, release_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (title, path, album_id, duration, track_no, disc_no, file_hash, cover_id),
+            (
+                title,
+                path,
+                album_id,
+                duration,
+                track_no,
+                disc_no,
+                file_hash,
+                cover_id,
+                release_id,
+            ),
         )
         return self.cur.lastrowid
-    
-    def add_chromaprint(
-        self, chromaprint, hash
-    ):
+
+    def add_chromaprint(self, chromaprint, hash):
         self.cur.execute(
             """
             UPDATE tracks
             SET chromaprint = ?
             WHERE hash = ?
             """,
-            (chromaprint, hash,)
-            
+            (
+                chromaprint,
+                hash,
+            ),
         )
 
     def get_cover_id(self, cover_hash):
 
         row = self.cur.execute(
-            "SELECT id FROM covers WHERE hash=?", (cover_hash,)
+            "SELECT id FROM covers WHERE cover_hash=?", (cover_hash,)
         ).fetchone()
 
         if row:
             return row[0]
 
-        self.cur.execute("INSERT INTO covers(hash) VALUES (?)", (cover_hash,))
+        self.cur.execute("INSERT INTO covers(cover_hash) VALUES (?)", (cover_hash,))
         self.new_cover_id = int(self.cur.lastrowid) + 1  # type: ignore
         return self.cur.lastrowid
 
-    def get_tracks(self, sort_by="title", ascending=True) -> list[Track]:
+    def get_tracks(self, user_search="", sort_by="title", ascending=True) -> list[Track]:
         valid_sorts = {
             "title": "t.title",
             "artist": "a.name",
@@ -313,21 +317,31 @@ class LibraryManager:
         order = valid_sorts.get(sort_by, "t.title")
         direction = "ASC" if ascending else "DESC"
 
+        search = user_search.strip()
+
         query = f"""
             SELECT 
                 t.*,
                 al.title AS album,
-                a.name AS artist
+                a.name AS artist,
+                c.cover_hash AS cover_hash
             FROM tracks t
             LEFT JOIN albums al ON t.album_id = al.id
             LEFT JOIN track_artists ta ON t.id = ta.track_id
             LEFT JOIN artists a ON ta.artist_id = a.id
+            LEFT JOIN covers c ON t.cover_id = c.id
+            WHERE (
+                t.title LIKE ?
+                OR al.title LIKE ?
+                OR a.name LIKE ?
+            )
             GROUP BY t.id
             ORDER BY {order} COLLATE NOCASE {direction}
         """
 
-        rows = self.cur.execute(query).fetchall()
+        search_param = f"%{search}%"
 
+        rows = self.cur.execute(query, (search_param, search_param, search_param)).fetchall()
         tracks = []
         for row in rows:
             data = dict(row)
@@ -337,12 +351,12 @@ class LibraryManager:
                 data["artists"] = artists.split("||")
                 data["artist"] = data["artists"][0]
             else:
-                data["artists"] = []
-                data["artist"] = None
+                data["artists"] = [data["artist"]]
 
             tracks.append(Track.from_db(data))
 
         return tracks
+
 
 def hash_file(file_path, block_size=65536):
     h = hashlib.md5()
@@ -354,4 +368,3 @@ def hash_file(file_path, block_size=65536):
             f.seek(-block_size, os.SEEK_END)
             h.update(f.read(block_size))
         return h.hexdigest()
-

@@ -15,13 +15,12 @@ from ui.tracks import TrackView
 
 if "linux" in platform: 
     LINUX = True
-    os.environ["FPCALC"] = os.path.abspath("./bin/fpcalc")
+    os.environ["FPCALC"] = os.path.abspath("./src/assets/bin/fpcalc")
 elif platform == "darwin":
     exit()
 elif platform == "win32":
     WINDOWS = True
-    os.environ["FPCALC"] = os.path.abspath("./bin/fpcalc.exe")
-
+    os.environ["FPCALC"] = os.path.abspath("./src/assets/bin/fpcalc.exe")
 
 class Main:
     def __init__(
@@ -29,7 +28,7 @@ class Main:
         page: ft.Page,
     ):
         self.page = page
-        self.audio = AudioManager()
+        self.audio = AudioManager(self)
         self.presance = PresenceManager(self.audio)
         
         self.library = LibraryManager()
@@ -40,7 +39,7 @@ class Main:
         self.page.window.prevent_close = True
         self.page.window.on_event = self.window_event
 
-        asyncio.create_task(self.library.scan_folder("/home/ice424/Music", observer=self))
+        page.run_task(self.library.scan_folder, "/home/ice424/Music", observer=self)
         page.run_task(self.presance.update_loop)
         
         self.build_ui()
@@ -61,13 +60,13 @@ class Main:
             border_radius=10,
             ink=True,
             content=ft.Row(controls=[ft.Icon(icon), ft.Text(title)]),
-            on_click=lambda e: self.audio.load_file("/home/ice424/Music/Pictured as Perfect.mp3"),
+            on_click=lambda e: print("HI"),
         )
 
     def build_ui(self):
-        self.page.fonts = {"RobotoMono": "/fonts/RobotoMono-Regular.ttf"}
+        self.page.fonts = {"RobotoMono": "/fonts/RobotoMono-Regular.ttf", "NotoSansMono": "/fonts/NotoSansMono-Regular.ttf"}
         self.page.title = "beluga"
-        self.page.theme = ft.Theme(font_family="RobotoMono")
+        self.page.theme = ft.Theme(font_family="NotoSansMono")
         self.page.bottom_appbar = ft.BottomAppBar(height=80, content=self.playbar)
         self.page.add(
             ft.SafeArea(
@@ -134,7 +133,12 @@ class Main:
 
     def on_library_loaded(self):
         self.page.show_dialog(ft.SnackBar(ft.Text("Refreshed Library")))
-        asyncio.create_task(self.library.update_fingerprints("/home/ice424/Music", observer=self))
+        track = self.library.get_tracks(user_search="prefer")[0]
+        
+        self.audio.load_track(track)
+        
+        self.page.run_task(self.library.update_fingerprints, "/home/ice424/Music", observer=self)
+
         
     def on_fingerprints_loaded(self):
         self.page.show_dialog(ft.SnackBar(ft.Text("Fingerprinted files")))
@@ -143,4 +147,4 @@ def main(page: ft.Page):
     Main(page)
 
 
-ft.run(main)
+ft.run(main, assets_dir="assets")

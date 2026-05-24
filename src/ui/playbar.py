@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from tools.audio_manager import AudioManager
-    from tools.track import AutoTrack
+    from tools.track import Track
 
 
 class Playbar(ft.Row):
@@ -169,8 +169,10 @@ class Playbar(ft.Row):
             except Exception:
                 self._updating = False
                 continue
+            
             pos = self.audio.get_position()
             dur = self.audio.get_duration()
+            #TODO WHY IS DUR -0.001
             if dur > 0:
                 self.scrubber.value = pos / dur * 100
                 mins, secs = divmod(int(pos), 60)
@@ -182,12 +184,15 @@ class Playbar(ft.Row):
 
     def toggle_play(self, e):
         value = self.scrubber.value
-        if self.audio.toggle_playback():
-            dur = self.audio.get_duration()
-            new_pos = value / 100 * dur
-            self.audio.set_position(new_pos)
-            self.play_button.icon = ft.Icons.PAUSE_CIRCLE_FILLED_ROUNDED
-        else:
+        try:
+            if self.audio.toggle_playback():
+                dur = self.audio.get_duration()
+                new_pos = value / 100 * dur
+                self.audio.set_position(new_pos)
+                self.play_button.icon = ft.Icons.PAUSE_CIRCLE_FILLED_ROUNDED
+            else:
+                self.play_button.icon = ft.Icons.PLAY_CIRCLE_FILLED_ROUNDED
+        except FileNotFoundError:
             self.play_button.icon = ft.Icons.PLAY_CIRCLE_FILLED_ROUNDED
 
         pass
@@ -207,9 +212,13 @@ class Playbar(ft.Row):
             self.volume_slider.margin = ft.Margin(left=0, right=0)
 
     def on_scrubber_change(self, e):
-        dur = self.audio.get_duration()
-        new_pos = self.scrubber.value / 100 * dur
-        self.audio.set_position(new_pos)
+        try:
+            dur = self.audio.get_duration()
+            new_pos = self.scrubber.value / 100 * dur
+            self.audio.set_position(new_pos)
+        except FileNotFoundError:
+            dur = 0
+        
 
     def on_volume_slider_change(self, e: ft.Event[ft.Slider]):
         self.saved_audio_value = None
@@ -269,7 +278,8 @@ class Playbar(ft.Row):
             self.update_task = asyncio.create_task(self.update_position())
         pass
 
-    def on_track_change(self, track: "AutoTrack"):
+    def on_track_change(self, track: "Track"):
+        print("update Playbar info")
         if track:
             self.SongInfo.SongName.value = str(track.title)
             self.SongInfo.ArtistName.value = str(track.artist)
@@ -277,6 +287,7 @@ class Playbar(ft.Row):
             self.SongInfo.songCover.src = str(track.cover_path)
             self.SongInfo.update()
             if  self.update_task.done:
+                print("Starting playbar update task")
                 self._updating = True
                 self.update_task = asyncio.create_task(self.update_position())
         else:
