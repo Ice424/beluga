@@ -40,7 +40,7 @@ class Receive():
         print("Fetching lyrics in background...")
         await asyncio.sleep(100) 
 
-class GetCover():
+class GetCover(): #TODO rewrite to use acoustID
     def __init__(self, track, observer) -> None:
         self.observer = observer
         asyncio.create_task(self.get_cover(track))

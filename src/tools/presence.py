@@ -40,20 +40,30 @@ class PresenceManager:
         try:
             await self.RPC.connect()
             self.connected = True
-        except Exception:
+            print("Started Presance")
+        except Exception as e:
+            print(e)
             self.connected = False
-        
 
         while self.connected:
             try:
                 await self.update()
+                attempts = 0
+
             except PipeClosed, InvalidPipe:
                 if attempts <= 3:
                     await asyncio.sleep(30)
                     attempts += 1
+                    try:
+                        await self.RPC.connect()
+                    except:
+                        pass
+                    print(f"Pipe closed {attempts}")
                 else:
+                    print("Presance shut down")
                     self.connected = False
-            except Exception:
+            except Exception as e:
+                print(e)
                 self.connected = False
             await asyncio.sleep(15)
 
@@ -64,8 +74,9 @@ class PresenceManager:
             self.track_artist = track.artist
             self.start = int(time.time())
             self.end = self.start + int(self.track_duration)
-    
+
             GetCover(track, self)
+            asyncio.create_task(self.update())
 
     def on_position_change(self, position):
         asyncio.create_task(self.update())
@@ -80,10 +91,14 @@ class PresenceManager:
 
     async def update(self):
         if self.connected == True:
-            self.start = int(time.time()) - self.audio_manager.get_position()
-            self.end = self.start + int(self.audio_manager.get_duration())
+            try:
+                self.start = int(time.time()) - self.audio_manager.get_position()
+                self.end = self.start + int(self.audio_manager.get_duration())
+            except FileNotFoundError:
+                self.is_playing = False
 
             if self.is_playing:
+
                 await self.RPC.update(
                     activity_type=ActivityType.LISTENING,
                     status_display_type=StatusDisplayType.DETAILS,
@@ -91,8 +106,8 @@ class PresenceManager:
                     state=self.track_artist,
                     large_url="https://github.com/Ice424/beluga",
                     large_image=self.cover_url,
-                    start=self.start,
-                    end=self.end,
+                    start=int(self.start),
+                    end=int(self.end),
                 )
             else:
                 await self.RPC.update(
@@ -105,4 +120,3 @@ class PresenceManager:
                     start=None,
                     end=None,
                 )
-            

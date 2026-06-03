@@ -56,6 +56,7 @@ class LibraryManager:
         FOREIGN KEY(album_id) REFERENCES albums(id) ON DELETE CASCADE,
         FOREIGN KEY(artist_id) REFERENCES artists(id) ON DELETE CASCADE
         );""")
+        
         self.cur.execute("""
         CREATE TABLE tracks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,7 +70,7 @@ class LibraryManager:
         disc_number INTEGER,
         release_id TEXT,
         chromaprint BLOB,
-        musicbrainz_id TEXT,
+        modified_at TIMESTAMP,
         
         
 
@@ -142,6 +143,11 @@ class LibraryManager:
         tracks = tuple(self.get_tracks())
         alert = False
         for track in tracks:
+            if not Path(track.file_path).exists(): #TODO not gen chromaprint if musicbrainz id is here
+                self.cur.execute("""
+                                 DELETE FROM tracks WHERE path = ?
+                                 """,
+                                 (track.file_path,))
             if not track.chromaprint:
                 alert = True
                 chromaprint = await track.generate_chromaprint()
@@ -153,11 +159,16 @@ class LibraryManager:
             getattr(observer, "on_fingerprints_loaded")()
 
     def add_track(self, file_path: str):
-        exists, file_hash = self.track_exists(file_path)
+        exists, file_hash = self.track_hash_exists(file_path)
+
+        
+        track = Track.from_file(file_path)
+        
         if exists:
             return
-        track = Track.from_file(file_path)
-
+        
+        
+            
         cover_id = self.get_cover_id(track.cover_hash)
 
         artist_id = self.get_artist_id(track.artist)
@@ -165,18 +176,34 @@ class LibraryManager:
         self.link_album_artist(album_id, artist_id)
 
         release_id = track.musicbrainz_id
+        track_id = self.should_overwrite(track)
+        if not track_id:
+            track_id = self.insert_track(
+                track.title,
+                file_path,
+                album_id,
+                track.duration,
+                track.tracknumber,
+                track.discnumber,
+                file_hash,
+                cover_id,
+                release_id,
+                track.modified_at
+            )
+        else:
+            self.update_track(
+                track.title,
+                file_path,
+                album_id,
+                track.duration,
+                track.tracknumber,
+                track.discnumber,
+                file_hash,
+                cover_id,
+                release_id,
+                track.modified_at
+            )
 
-        track_id = self.insert_track(
-            track.title,
-            file_path,
-            album_id,
-            track.duration,
-            track.tracknumber,
-            track.discnumber,
-            file_hash,
-            cover_id,
-            release_id,
-        )
 
         self.link_track_artist(track_id, artist_id)
 
@@ -185,8 +212,30 @@ class LibraryManager:
                 if artist != track.artist:
                     artist_id = self.get_artist_id(artist)
                     self.link_track_artist(track_id, artist_id)
-
-    def track_exists(self, file_path) -> tuple[bool, str]:
+                    
+    def should_overwrite(self, track:"Track"):
+        self.cur.execute(
+            """
+            SELECT EXISTS(
+                SELECT 1 FROM tracks WHERE path = ?
+            )
+        """,
+            (track.file_path,),
+        )
+        row = self.cur.fetchone()
+        if not bool(row[0]):
+            return
+        
+        data = dict(row)
+        print(data.get("modified_at"), track.modified_at)
+        if int(data.get("modified_at")) < int(track.modified_at):
+            return data.get("id")
+            
+        
+        
+    
+    
+    def track_hash_exists(self, file_path) -> tuple[bool, str]:
         hash = hash_file(file_path)
         self.cur.execute(
             """
@@ -197,6 +246,8 @@ class LibraryManager:
             (hash,),
         )
         return (bool(self.cur.fetchone()[0]), hash)
+        
+       
 
     def get_artist_id(self, artist_name):
         if not artist_name:
@@ -257,13 +308,14 @@ class LibraryManager:
         file_hash,
         cover_id,
         release_id,
+        modified_at
     ):
 
         self.cur.execute(
             """
             INSERT INTO tracks
-            (title, path, album_id, duration, track_number, disc_number, hash, cover_id, release_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (title, path, album_id, duration, track_number, disc_number, hash, cover_id, release_id, modified_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 title,
@@ -275,9 +327,45 @@ class LibraryManager:
                 file_hash,
                 cover_id,
                 release_id,
+                modified_at
             ),
         )
         return self.cur.lastrowid
+    
+    def update_track(
+        self,
+        title,
+        path,
+        album_id,
+        duration,
+        track_no,
+        disc_no,
+        file_hash,
+        cover_id,
+        release_id,
+        modified_at
+    ):
+
+        self.cur.execute(
+            """
+            UPDATE tracks
+            SET (title, album_id, duration, track_number, disc_number, hash, cover_id, release_id, modified_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            WHERE PATH = ?
+            """,
+            (
+                title,
+                album_id,
+                duration,
+                track_no,
+                disc_no,
+                file_hash,
+                cover_id,
+                release_id,
+                modified_at,
+                path
+            ),
+        )
 
     def add_chromaprint(self, chromaprint, hash):
         self.cur.execute(

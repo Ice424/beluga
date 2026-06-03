@@ -133,11 +133,11 @@ class Main:
 
     def on_library_loaded(self):
         self.page.show_dialog(ft.SnackBar(ft.Text("Refreshed Library")))
-        track = self.library.get_tracks(user_search="prefer")[0]
+        track = self.library.get_tracks(user_search="a million ghosts")[0]
         
         self.audio.load_track(track)
         
-        self.page.run_task(self.library.update_fingerprints, "/home/ice424/Music", observer=self)
+        asyncio.create_task(self.library.update_fingerprints("/home/ice424/Music", observer=self)) #TODO both asyncio and page.run_task make playbar unresponsive, can still control through mpris tho? 
 
         
     def on_fingerprints_loaded(self):

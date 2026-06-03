@@ -12,7 +12,7 @@ class Playbar(ft.Row):
         def __init__(self, audio) -> None:
             super().__init__()
             
-            
+            self.dur = -1
             self.SongName = ft.Text(
                                     "",
                                     weight=ft.FontWeight.BOLD,
@@ -171,12 +171,12 @@ class Playbar(ft.Row):
                 continue
             
             pos = self.audio.get_position()
-            dur = self.audio.get_duration()
-            #TODO WHY IS DUR -0.001
-            if dur > 0:
-                self.scrubber.value = pos / dur * 100
+
+
+            if self.dur > 0:
+                self.scrubber.value = pos / self.dur * 100
                 mins, secs = divmod(int(pos), 60)
-                total_mins, total_secs = divmod(int(dur), 60)
+                total_mins, total_secs = divmod(int(self.dur), 60)
                 self.time_label.value = f"{mins:02}:{secs:02}"
                 self.song_length.value = f"{total_mins:02}:{total_secs:02}"
                 self.main_page.update()
@@ -186,8 +186,8 @@ class Playbar(ft.Row):
         value = self.scrubber.value
         try:
             if self.audio.toggle_playback():
-                dur = self.audio.get_duration()
-                new_pos = value / 100 * dur
+
+                new_pos = value / 100 * self.dur
                 self.audio.set_position(new_pos)
                 self.play_button.icon = ft.Icons.PAUSE_CIRCLE_FILLED_ROUNDED
             else:
@@ -213,11 +213,11 @@ class Playbar(ft.Row):
 
     def on_scrubber_change(self, e):
         try:
-            dur = self.audio.get_duration()
-            new_pos = self.scrubber.value / 100 * dur
+            
+            new_pos = self.scrubber.value / 100 * self.dur
             self.audio.set_position(new_pos)
         except FileNotFoundError:
-            dur = 0
+            self.dur = -1
         
 
     def on_volume_slider_change(self, e: ft.Event[ft.Slider]):
@@ -286,6 +286,7 @@ class Playbar(ft.Row):
             self.SongInfo.AlbumName.value = str(track.album)
             self.SongInfo.songCover.src = str(track.cover_path)
             self.SongInfo.update()
+            self.dur = self.audio.get_duration()
             if  self.update_task.done:
                 print("Starting playbar update task")
                 self._updating = True

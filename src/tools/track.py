@@ -59,7 +59,7 @@ class Track:
         self.file_hash = file_hash
         
         self.chromaprint = chromaprint
-        self.musicbrainz_id = musicbrainz_id
+        self.musicbrainz_id = musicbrainz_id #TODO add getting id from chromaprint
 
     @classmethod
     def from_file(cls, file_path: str) -> "Track":
@@ -106,6 +106,7 @@ class Track:
         else:
             raise ValueError(f"Unsupported file: {cls.file_path}")
         # ARTISTS
+        
         track.artists = cls._split_artists(track.raw_artist)
         track.artist = track.artists[0] if track.artists else None
 
@@ -116,7 +117,7 @@ class Track:
         stat = os.stat(file_path)
         track.file_size = stat.st_size
         track.modified_at = int(stat.st_mtime)
-
+       
         #COVER 
         track.cover_path, track.cover_hash = track._extract_cover(audio)
 
@@ -189,9 +190,11 @@ class Track:
                     data = base64.b64decode(cover[0])
                 except Exception:
                     pass
-
+        if not data:
+            return ("", "")
         cover_hash = hashlib.md5(data).hexdigest()
         cover_path = self.COVER_CACHE / f"{cover_hash}.jpg"
+       
 
         if not cover_path.exists():
             with open(cover_path, "wb") as f:

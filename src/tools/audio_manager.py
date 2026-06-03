@@ -16,12 +16,13 @@ class AudioManager:
         self.is_playing = False
         self.track: Track | None = None
         self.page = page
-
-        self.vlc_instance: vlc.EventManager = vlc.Instance()
+        
+        self.vlc_instance: vlc.Instance = vlc.Instance()
         if not self.vlc_instance:
             raise
 
-        self.player = self.vlc_instance.media_player_new()
+        self.player: vlc.MediaPlayer = self.vlc_instance.media_player_new()
+        self.media: vlc.Media = self.vlc_instance.media_new_as_node("temp")
         if audio_file:
             self.load_file(audio_file)
 
@@ -38,10 +39,13 @@ class AudioManager:
 
     def load_file(self, file):
         self.player.stop()
-        media = self.vlc_instance.media_new(file)
-
+        self.media: vlc.Media = self.vlc_instance.media_new(file)
+ 
+        self.media.parse()
+        
         self.track = Track.from_file(file)
-        self.player.set_media(media)
+        self.player.set_media(self.media)
+        
         self.audio_file = file
         print(self.track)
         self._notify("track_change", track=self.track)
@@ -49,9 +53,12 @@ class AudioManager:
     def load_track(self, track: "Track"):
         self.player.stop()
         self.audio_file = track.file_path
-        media = self.vlc_instance.media_new(self.audio_file)
+        self.media: vlc.Media = self.vlc_instance.media_new(self.audio_file)
+
+        self.media.parse()
+
         self.track = track
-        self.player.set_media(media)
+        self.player.set_media(self.media)
         print(self.track)
         print(self.track.artists)
         self._notify("track_change", track=self.track)
@@ -95,12 +102,14 @@ class AudioManager:
 
     def get_position(self) -> float:
         self.test_file()
-
-        return self.player.get_time() / 1000
+        pos = self.player.get_time() / 1000 
+        if pos <= self.get_duration(): #vlc why do you do this
+            return pos
+        return 0.0
 
     def get_duration(self) -> float:
         self.test_file()
-        return self.player.get_length() / 1000
+        return self.media.get_duration() / 1000
 
     def set_volume(self, volume: int):
 
