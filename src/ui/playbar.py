@@ -174,7 +174,8 @@ class Playbar(ft.Row):
 
 
             if self.dur > 0:
-                self.scrubber.value = pos / self.dur * 100
+                scrubber_pos = pos / self.dur * 100
+                self.scrubber.value = scrubber_pos if scrubber_pos >= 0 else 0
                 mins, secs = divmod(int(pos), 60)
                 total_mins, total_secs = divmod(int(self.dur), 60)
                 self.time_label.value = f"{mins:02}:{secs:02}"

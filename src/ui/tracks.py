@@ -97,9 +97,9 @@ class Header(ft.Container):
                 content=ft.Row(controls=[ft.Icon(ft.Icons.SORT), ft.Text(sort_mode)])
             ),
             items=[
-                ft.PopupMenuItem(content="Sm"),
-                ft.PopupMenuItem(content="Med"),
-                ft.PopupMenuItem(content="Lg"),
+                ft.PopupMenuItem(content="Title"),
+                ft.PopupMenuItem(content="Artist"),
+                ft.PopupMenuItem(content="Album"),
             ],
             menu_position=ft.PopupMenuPosition.UNDER,
         )

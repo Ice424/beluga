@@ -68,7 +68,8 @@ class PresenceManager:
             await asyncio.sleep(15)
 
     def on_track_change(self, track: TR):
-        if track:
+        
+        if track and self.connected:
             self.track_duration = track.duration
             self.track_title = track.title
             self.track_artist = track.artist

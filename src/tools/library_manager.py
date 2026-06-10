@@ -3,6 +3,8 @@ import os
 import hashlib
 import asyncio
 
+import traceback
+
 from pathlib import Path
 from tools.track import Track
 
@@ -25,6 +27,9 @@ class LibraryManager:
         self.new_cover_id = 1
         if setup:
             self.sql_setup()
+            
+    def close(self):
+        self.conn.close()
 
     def sql_setup(self):
 
@@ -32,7 +37,7 @@ class LibraryManager:
         CREATE TABLE artists (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
-        sort_name TEXT,
+        artist_mbid TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """)
@@ -41,6 +46,10 @@ class LibraryManager:
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         year INTEGER,
+        
+        release_mbid TEXT UNIQUE,
+        release_group_mbid TEXT,
+        
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         cover_id INTEGER,
         
@@ -50,13 +59,14 @@ class LibraryManager:
         self.cur.execute("""CREATE TABLE album_artists (
         album_id INTEGER,
         artist_id INTEGER,
+
     
         PRIMARY KEY (album_id, artist_id),
     
         FOREIGN KEY(album_id) REFERENCES albums(id) ON DELETE CASCADE,
         FOREIGN KEY(artist_id) REFERENCES artists(id) ON DELETE CASCADE
         );""")
-        
+
         self.cur.execute("""
         CREATE TABLE tracks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,10 +78,13 @@ class LibraryManager:
         duration REAL,
         track_number INTEGER,
         disc_number INTEGER,
-        release_id TEXT,
-        chromaprint BLOB,
+        
         modified_at TIMESTAMP,
         
+        recording_mbid TEXT,
+        track_mbid TEXT,
+        acoustid TEXT,
+        chromaprint BLOB,
         
 
         FOREIGN KEY(album_id) REFERENCES albums(id),
@@ -95,7 +108,8 @@ class LibraryManager:
         self.cur.execute("""
             CREATE TABLE covers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                cover_hash TEXT UNIQUE
+                cover_hash TEXT UNIQUE,
+                image_url TEXT
             )
             """)
 
@@ -131,7 +145,7 @@ class LibraryManager:
                 try:
                     await loop.run_in_executor(None, self.add_track, str(path))
                 except Exception as e:
-                    print("Failed:", path, e)
+                    print(traceback.format_exc())
 
         self.conn.commit()
 
@@ -143,14 +157,18 @@ class LibraryManager:
         tracks = tuple(self.get_tracks())
         alert = False
         for track in tracks:
-            if not Path(track.file_path).exists(): #TODO not gen chromaprint if musicbrainz id is here
-                self.cur.execute("""
+            if not Path(
+                track.file_path
+            ).exists(): 
+                self.cur.execute(
+                    """
                                  DELETE FROM tracks WHERE path = ?
                                  """,
-                                 (track.file_path,))
-            if not track.chromaprint:
+                    (track.file_path,),
+                )
+            if not track.chromaprint and not track.acoustid:
                 alert = True
-                chromaprint = await track.generate_chromaprint()
+                chromaprint = await asyncio.to_thread(track.generate_chromaprint)
                 self.add_chromaprint(chromaprint, track.file_hash)
 
         self.conn.commit()
@@ -161,23 +179,23 @@ class LibraryManager:
     def add_track(self, file_path: str):
         exists, file_hash = self.track_hash_exists(file_path)
 
-        
         track = Track.from_file(file_path)
-        
+
         if exists:
             return
-        
-        
-            
+
         cover_id = self.get_cover_id(track.cover_hash)
 
-        artist_id = self.get_artist_id(track.artist)
+        artist_id = self.get_artist_id(track.artist, track.artist_mbid)
+        artists = track.artists[1:]
+        
         album_id = self.get_album_id(track.album)
         self.link_album_artist(album_id, artist_id)
-
-        release_id = track.musicbrainz_id
+        
         track_id = self.should_overwrite(track)
-        if not track_id:
+
+
+        if track_id is None:
             track_id = self.insert_track(
                 track.title,
                 file_path,
@@ -187,8 +205,10 @@ class LibraryManager:
                 track.discnumber,
                 file_hash,
                 cover_id,
-                release_id,
-                track.modified_at
+                track.modified_at,
+                track.recording_mbid,
+                track.track_mbid,
+                track.acoustid
             )
         else:
             self.update_track(
@@ -200,41 +220,43 @@ class LibraryManager:
                 track.discnumber,
                 file_hash,
                 cover_id,
-                release_id,
-                track.modified_at
+                track.modified_at,
+                track.recording_mbid,
+                track.track_mbid,
+                track.acoustid
             )
-
 
         self.link_track_artist(track_id, artist_id)
+        artists = track.artists[1:]
+        for artist in artists:
+                artist_id = self.get_artist_id(artist, None)
+                self.link_track_artist(track_id, artist_id)
 
-        if track.artists:
-            for artist in track.artists:
-                if artist != track.artist:
-                    artist_id = self.get_artist_id(artist)
-                    self.link_track_artist(track_id, artist_id)
-                    
-    def should_overwrite(self, track:"Track"):
-        self.cur.execute(
+    def should_overwrite(self, track: "Track") -> int | None:
+        row = self.cur.execute(
             """
-            SELECT EXISTS(
-                SELECT 1 FROM tracks WHERE path = ?
-            )
-        """,
+            SELECT id, modified_at
+            FROM tracks
+            WHERE path = ?
+            """,
             (track.file_path,),
-        )
-        row = self.cur.fetchone()
-        if not bool(row[0]):
-            return
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        db_modified = row["modified_at"]
+
+        try:
+            if int(track.modified_at) > int(db_modified):
+                return row["id"]
+        except (TypeError, ValueError):
+            # If timestamps are missing or malformed, overwrite anyway
+            return row["id"]
+
+        return None
         
-        data = dict(row)
-        print(data.get("modified_at"), track.modified_at)
-        if int(data.get("modified_at")) < int(track.modified_at):
-            return data.get("id")
-            
-        
-        
-    
-    
+
     def track_hash_exists(self, file_path) -> tuple[bool, str]:
         hash = hash_file(file_path)
         self.cur.execute(
@@ -246,21 +268,24 @@ class LibraryManager:
             (hash,),
         )
         return (bool(self.cur.fetchone()[0]), hash)
-        
-       
 
-    def get_artist_id(self, artist_name):
+    def get_artist_id(self, artist_name, artist_mbid):
         if not artist_name:
             artist_name = "Unknown Artist"
 
         row = self.cur.execute(
-            "SELECT id FROM artists WHERE name=?", (artist_name,)
+            "SELECT * FROM artists WHERE name=?", (artist_name,)
         ).fetchone()
 
-        if row:
-            return row[0]
 
-        self.cur.execute("INSERT INTO artists(name) VALUES (?)", (artist_name,))
+        
+        if row and artist_mbid and dict(row)["artist_mbid"] is None:
+            self.cur.execute("""UPDATE artists SET name=?, artist_mbid=? WHERE id=?""", (artist_name, artist_mbid, dict(row)["id"]))
+            return dict(row)["id"]
+        elif row:
+            return dict(row)["id"]
+            
+        self.cur.execute("""INSERT INTO artists(name, artist_mbid) VALUES (?, ?)""", (artist_name, artist_mbid,))
 
         return self.cur.lastrowid
 
@@ -307,15 +332,17 @@ class LibraryManager:
         disc_no,
         file_hash,
         cover_id,
-        release_id,
-        modified_at
+        modified_at,
+        recording_mbid,
+        track_mbid,
+        acoustid
     ):
 
         self.cur.execute(
             """
             INSERT INTO tracks
-            (title, path, album_id, duration, track_number, disc_number, hash, cover_id, release_id, modified_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (title, path, album_id, duration, track_number, disc_number, hash, cover_id,  modified_at, recording_mbid, track_mbid, acoustid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 title,
@@ -326,12 +353,14 @@ class LibraryManager:
                 disc_no,
                 file_hash,
                 cover_id,
-                release_id,
-                modified_at
+                modified_at,
+                recording_mbid,
+                track_mbid,
+                acoustid
             ),
         )
         return self.cur.lastrowid
-    
+
     def update_track(
         self,
         title,
@@ -342,16 +371,28 @@ class LibraryManager:
         disc_no,
         file_hash,
         cover_id,
-        release_id,
-        modified_at
+        modified_at,
+        recording_mbid,
+        track_mbid,
+        acoustid
     ):
 
         self.cur.execute(
             """
             UPDATE tracks
-            SET (title, album_id, duration, track_number, disc_number, hash, cover_id, release_id, modified_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            WHERE PATH = ?
+SET
+    title = ?,
+    album_id = ?,
+    duration = ?,
+    track_number = ?,
+    disc_number = ?,
+    hash = ?,
+    cover_id = ?,
+    modified_at = ?
+    recording_mbid = ?
+    track_mbid = ?
+    acoustid = ?
+WHERE path = ?
             """,
             (
                 title,
@@ -361,9 +402,11 @@ class LibraryManager:
                 disc_no,
                 file_hash,
                 cover_id,
-                release_id,
                 modified_at,
-                path
+                recording_mbid,
+                track_mbid,
+                acoustid,
+                path,
             ),
         )
 
@@ -393,7 +436,9 @@ class LibraryManager:
         self.new_cover_id = int(self.cur.lastrowid) + 1  # type: ignore
         return self.cur.lastrowid
 
-    def get_tracks(self, user_search="", sort_by="title", ascending=True) -> list[Track]:
+    def get_tracks(
+        self, user_search="", sort_by="title", ascending=True
+    ) -> list[Track]:
         valid_sorts = {
             "title": "t.title",
             "artist": "a.name",
@@ -429,7 +474,9 @@ class LibraryManager:
 
         search_param = f"%{search}%"
 
-        rows = self.cur.execute(query, (search_param, search_param, search_param)).fetchall()
+        rows = self.cur.execute(
+            query, (search_param, search_param, search_param)
+        ).fetchall()
         tracks = []
         for row in rows:
             data = dict(row)

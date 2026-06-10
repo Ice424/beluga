@@ -3,7 +3,6 @@ import base64
 import hashlib
 import re
 
-
 import acoustid as aid
 
 from dataclasses import dataclass, field
@@ -41,12 +40,19 @@ class Track:
         modified_at: Optional[int] = None,
         file_hash: Optional[str] = None,
         chromaprint: Optional[bytes] = None,
-        musicbrainz_id: Optional[str] = None
+        track_mbid: Optional[str] = None,
+        recording_mbid: Optional[str] = None,
+        acoustid: Optional[str] = None,
+        artist_mbid: Optional[str] = None,
+        release_year: Optional[str] = None,
+        release_mbid: Optional[str] = None,
+        release_group_mbid: Optional[str] = None
     ):
         self.file_path = file_path
         self.title = title
         self.artist = artist
         self.artists = artists or []
+        self.raw_artist = None
         self.album = album
         self.tracknumber = tracknumber
         self.discnumber = discnumber
@@ -59,7 +65,15 @@ class Track:
         self.file_hash = file_hash
         
         self.chromaprint = chromaprint
-        self.musicbrainz_id = musicbrainz_id #TODO add getting id from chromaprint
+        self.track_mbid = track_mbid 
+        self.recording_mbid = recording_mbid
+        self.acoustid = acoustid
+        
+        self.artist_mbid = artist_mbid
+        
+        self.release_year = release_year
+        self.release_mbid = release_mbid
+        self.release_group_mbid = release_group_mbid
 
     @classmethod
     def from_file(cls, file_path: str) -> "Track":
@@ -69,18 +83,28 @@ class Track:
         if audio is None:
             raise ValueError(f"Invalid file: {file_path}")
 
-        track.title = track.artist = track.album = "Unknown"
+
         track.artists = []
         track.tracknumber = track.discnumber = None
-        
-        #METADATA
+         
+         #METADATA
         if isinstance(audio, FLAC):
-            track.title = audio.get("title", [None])[0]
-            track.raw_artist = ";".join(audio.get("artist", []))
-            track.album = audio.get("album", [None])[0]
-            track.tracknumber = cls._parse_number(audio.get("tracknumber", [None])[0])
-            track.discnumber = cls._parse_number(audio.get("discnumber", [None])[0])
-            track.musicbrainz_id = audio.get("musicbrainz_trackid", [None])[0]
+            track.title = audio.get("title", [None])[0]  # pyright: ignore[reportOptionalSubscript]
+            track.raw_artist = ";".join(audio.get("artist", []))  # pyright: ignore[reportOptionalSubscript]
+            track.artists = audio.get("artists", [])
+            track.album = audio.get("album", [None])[0]  # pyright: ignore[reportOptionalSubscript]
+            track.tracknumber = cls._parse_number(audio.get("tracknumber", [None])[0])  # pyright: ignore[reportOptionalSubscript]
+            track.discnumber = cls._parse_number(audio.get("discnumber", [None])[0])  # pyright: ignore[reportOptionalSubscript]
+
+            track.track_mbid = audio.get("MUSICBRAINZ_RELEASETRACKID", [None])[0] # pyright: ignore[reportOptionalSubscript]
+            track.recording_mbid = audio.get("MUSICBRAINZ_TRACKID", [None])[0] # pyright: ignore[reportOptionalSubscript]
+            track.acoustid = audio.get("acoustid_id", [None])[0] # pyright: ignore[reportOptionalSubscript]
+
+            track.artist_mbid = audio.get("musicbrainz_artistid", [None])[0] # pyright: ignore[reportOptionalSubscript]
+
+            track.release_year = audio.get("originalyear", [None])[0] # pyright: ignore[reportOptionalSubscript]
+            track.release_mbid = audio.get("musicbrainz_albumid", [None])[0] # pyright: ignore[reportOptionalSubscript]
+            track.release_group_mbid = audio.get("musicbrainz_releasegroupid", [None])[0] # pyright: ignore[reportOptionalSubscript]
 
         elif isinstance(audio.tags, ID3):
             track.title = cls._id3(audio, "TIT2")
@@ -88,7 +112,16 @@ class Track:
             track.album = cls._id3(audio, "TALB")
             track.tracknumber = cls._parse_number(cls._id3(audio, "TRCK"))
             track.discnumber = cls._parse_number(cls._id3(audio, "TPOS"))
-            track.musicbrainz_id = cls._id3(audio, "TXXX:MusicBrainz Recording Id")
+
+            track.track_mbid = cls._id3(audio, "UFID:http://musicbrainz.org")
+            track.recording_mbid = cls._id3(audio, "TXXX:MusicBrainz Recording Id")
+            track.acoustid = cls._id3(audio, "TXXX:Acoustid Id")
+
+            track.artist_mbid = cls._id3(audio, "TXXX:MusicBrainz Artist Id")
+
+            track.release_year = cls._id3(audio, "TDOR") or cls._id3(audio, "TDRC")
+            track.release_mbid = cls._id3(audio, "TXXX:MusicBrainz Album Id")
+            track.release_group_mbid = cls._id3(audio, "TXXX:MusicBrainz Release Group Id")
 
         elif isinstance(audio, MP4):
             track.title = cls._mp4(audio, "\xa9nam")
@@ -96,6 +129,17 @@ class Track:
             track.album = cls._mp4(audio, "\xa9alb")
             track.tracknumber = cls._parse_number(audio.tags.get("trkn", [(None, None)])[0])
             track.discnumber = cls._parse_number(audio.tags.get("disk", [(None, None)])[0])
+
+            track.track_mbid = cls._mp4(audio, "----:com.apple.iTunes:MusicBrainz Track Id")
+            track.recording_mbid = cls._mp4(audio, "----:com.apple.iTunes:MusicBrainz Recording Id")
+            track.acoustid = cls._mp4(audio, "----:com.apple.iTunes:Acoustid Id")
+
+            track.artist_mbid = cls._mp4(audio, "----:com.apple.iTunes:MusicBrainz Artist Id")
+
+            track.release_year = cls._mp4(audio, "\xa9day")
+            track.release_mbid = cls._mp4(audio, "----:com.apple.iTunes:MusicBrainz Album Id")
+            track.release_group_mbid = cls._mp4(audio, "----:com.apple.iTunes:MusicBrainz Release Group Id")
+
         elif isinstance(audio, OggVorbis):
             track.title = audio.get("title", [None])[0]
             track.raw_artist = audio.get("artist", [None])[0]
@@ -103,11 +147,22 @@ class Track:
             track.album = audio.get("album", [None])[0]
             track.tracknumber = cls._parse_number(audio.get("tracknumber", [None])[0])
             track.discnumber = cls._parse_number(audio.get("discnumber", [None])[0])
+
+            track.track_mbid = audio.get("musicbrainz_trackid", [None])[0]
+            track.recording_mbid = audio.get("musicbrainz_recordingid", [None])[0]
+            track.acoustid = audio.get("acoustid_id", [None])[0]
+
+            track.artist_mbid = audio.get("musicbrainz_artistid", [None])[0]
+
+            track.release_year = audio.get("originalyear", [None])[0] or audio.get("date", [None])[0]
+            track.release_mbid = audio.get("musicbrainz_albumid", [None])[0]
+            track.release_group_mbid = audio.get("musicbrainz_releasegroupid", [None])[0]
+
         else:
             raise ValueError(f"Unsupported file: {cls.file_path}")
         # ARTISTS
-        
-        track.artists = cls._split_artists(track.raw_artist)
+        if len(track.artists) <= 1:
+            track.artists = cls._split_artists(track.raw_artist)
         track.artist = track.artists[0] if track.artists else None
 
         #DURATION
@@ -120,7 +175,12 @@ class Track:
        
         #COVER 
         track.cover_path, track.cover_hash = track._extract_cover(audio)
-
+        if not track.title:
+            track.title = Path(file_path).stem
+        if not track.artist:
+            track.artist = "Unknown"
+        if not track.album:
+            track.album = "Unknown"
         return track
     
     @classmethod
@@ -136,7 +196,13 @@ class Track:
             cover_path= cls.COVER_CACHE / f"{row.get("cover_hash")}.jpg",
             cover_hash=row.get("cover_hash"),
             file_hash=row.get("hash"),
-            chromaprint=row.get("chromaprint")
+            
+            chromaprint=row.get("chromaprint"),
+            recording_mbid = row.get("recording_mbid"),
+            track_mbid=row.get("track_mbid"),
+            acoustid =row.get("acoustid")
+            
+            
         )
     
     
@@ -242,7 +308,9 @@ class Track:
     @staticmethod
     def _id3(audio, key):
         tag = audio.tags.get(key)
-        return tag.text[0] if tag else None
+        if tag and hasattr(tag, 'text'):
+            return tag.text[0]
+        return None
 
     @staticmethod
     def _mp4(audio, key):
@@ -255,7 +323,8 @@ class Track:
             return []
 
         separators = ["&", "feat.", "ft.", "with", ",", " and "]
-
+        if ";" in artist:
+            separators = [";"]
         artists = [artist]
 
         for sep in separators:
@@ -272,7 +341,7 @@ class Track:
             f"album={self.album!r} duration={self.duration:.1f}s>"
         )
 
-    async def generate_chromaprint(self):
+    def generate_chromaprint(self):
         if self.chromaprint:
             return self.chromaprint
         else:

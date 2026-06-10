@@ -97,6 +97,7 @@ class Main:
         )
 
     async def handle_yes_click(self, e: ft.Event[ft.Button]):
+        self.library.close()
         self.audio.stop()
         await self.page.window.destroy()
 
@@ -137,7 +138,7 @@ class Main:
         
         self.audio.load_track(track)
         
-        asyncio.create_task(self.library.update_fingerprints("/home/ice424/Music", observer=self)) #TODO both asyncio and page.run_task make playbar unresponsive, can still control through mpris tho? 
+        asyncio.create_task(self.library.update_fingerprints("/home/ice424/Music", observer=self)) 
 
         
     def on_fingerprints_loaded(self):
