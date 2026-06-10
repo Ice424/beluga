@@ -122,3 +122,5 @@ class AudioManager:
 
     def stop(self):
         self.player.stop()
+
+## TODO i think VLC auto clears the player's media if it reaches the end of the track meaning that you cant seek back to a previous location

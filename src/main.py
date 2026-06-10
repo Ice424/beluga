@@ -134,7 +134,7 @@ class Main:
 
     def on_library_loaded(self):
         self.page.show_dialog(ft.SnackBar(ft.Text("Refreshed Library")))
-        track = self.library.get_tracks(user_search="a million ghosts")[0]
+        track = self.library.get_tracks(user_search="Jumping")[0]
         
         self.audio.load_track(track)
         
