@@ -25,9 +25,21 @@ class AudioManager:
         self.media: vlc.Media = self.vlc_instance.media_new_as_node("temp")
         if audio_file:
             self.load_file(audio_file)
+        
+        events = self.player.event_manager()
+
+        events.event_attach(vlc.EventType.MediaPlayerEndReached,self._on_track_end)
 
     def subscribe(self, observer):
         self._observers.append(observer)
+    
+    def _on_track_end(self, event):
+        self.is_playing = False
+
+        self._notify(
+            "state_change",
+            is_playing=False
+        )
 
     def _notify(self, event_name: str, **kwargs):
         
@@ -36,12 +48,17 @@ class AudioManager:
                 getattr(obs, f"on_{event_name}")(**kwargs)
             except Exception:
                 pass
+    
+
 
     def load_file(self, file):
         self.player.stop()
         self.media: vlc.Media = self.vlc_instance.media_new(file)
  
-        self.media.parse()
+        self.media.parse_with_options(
+            vlc.MediaParseFlag.local,
+            timeout=5000
+        )
         
         self.track = Track.from_file(file)
         self.player.set_media(self.media)
@@ -55,12 +72,30 @@ class AudioManager:
         self.audio_file = track.file_path
         self.media: vlc.Media = self.vlc_instance.media_new(self.audio_file)
 
-        self.media.parse()
+        self.media.parse_with_options(
+            vlc.MediaParseFlag.local,
+            timeout=5000
+        )
 
         self.track = track
         self.player.set_media(self.media)
+        
+        self.player.play()
+
+        self.player.get_state()
+        while self.player.get_state() in (
+            vlc.State(1),
+            vlc.State(2),
+            vlc.State(0)
+        ):
+            self.player.get_state()
+            pass
+        
+        
+        self.player.pause()
+        self.player.set_time(0)
+        
         print(self.track)
-        print(self.track.artists)
         self._notify("track_change", track=self.track)
 
     def test_file(self):
@@ -85,6 +120,9 @@ class AudioManager:
 
     def play(self):
         self.test_file()
+        if self.player.get_state() in (vlc.State(6),vlc.State(5),vlc.State(0)):
+            self.load_track(self.track)
+            
         self.player.play()
         self.is_playing = True
         self._notify("state_change", is_playing=True)
@@ -99,6 +137,7 @@ class AudioManager:
         self.test_file()
         self.player.set_time(int(seconds * 1000))
         self._notify("position_change", position=seconds)
+        
 
     def get_position(self) -> float:
         self.test_file()
