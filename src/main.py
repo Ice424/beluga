@@ -10,7 +10,7 @@ from tools.library_manager import LibraryManager
 from tools.presence import PresenceManager
 
 from ui.playbar import Playbar
-from ui.tracks import TrackView
+from ui.tracks import View
 
 
 if "linux" in platform: 
@@ -35,11 +35,13 @@ class Main:
         
         self.playbar = Playbar(page, self.audio)
 
+        self.track_view = View(self.library)
+        
         self.showing_dialog = False
         self.page.window.prevent_close = True
         self.page.window.on_event = self.window_event
 
-        page.run_task(self.library.scan_folder, "/home/ice424/Music", observer=self)
+        page.run_task(self.library.scan_folder, "/home/ice424/Music", observers=[self, self.track_view])
         page.run_task(self.presance.update_loop)
         
         self.build_ui()
@@ -90,7 +92,7 @@ class Main:
                            ],
                         ),
                         ft.VerticalDivider(width=1),
-                        TrackView(self.library)
+                        self.track_view
                     ],
                 ),
             )
@@ -134,7 +136,7 @@ class Main:
 
     def on_library_loaded(self):
         self.page.show_dialog(ft.SnackBar(ft.Text("Refreshed Library")))
-        track = self.library.get_tracks(user_search="Jumping")[0]
+        track = self.library.get_tracks(user_search="Head Up")[0]
         
         self.audio.load_track(track)
         
