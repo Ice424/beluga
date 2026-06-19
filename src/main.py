@@ -35,7 +35,7 @@ class Main:
         
         self.playbar = Playbar(page, self.audio)
 
-        self.track_view = View(self.library)
+        self.track_view = View(self.library, self.audio)
         
         self.showing_dialog = False
         self.page.window.prevent_close = True

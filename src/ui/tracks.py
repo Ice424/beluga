@@ -6,6 +6,7 @@ from tools.track import Track
 
 if TYPE_CHECKING:
     from tools.library_manager import LibraryManager
+    from tools.audio_manager import AudioManager
 
 
 views = Literal[
@@ -24,6 +25,7 @@ class View(ft.Column):
     def __init__(
         self,
         library_manager: "LibraryManager",
+        audio_manager: "AudioManager",
         db_available=False,
         view_config: list[views] = [
             "cover_image",
@@ -36,9 +38,10 @@ class View(ft.Column):
     ) -> None:
         super().__init__()
         self.library = library_manager
+        self.search_manager = SearchManager(self, self.library)
         self.expand = True
-        self.header = Header(self, library_manager)
-        self.track_list = TrackList(view_config)
+        self.header = Header(self.search_manager)
+        self.track_list = TrackList(view_config, audio_manager)
         self.controls = [self.header, self.track_list]
 
         self.db_available = db_available
@@ -47,35 +50,52 @@ class View(ft.Column):
 
     def on_library_loaded(self):
         self.db_available = True
-        search = ft.Event("change", control=self.header.search_bar, data="")
-        self.header.search_bar.run_search(search)
+        
+        self.search_manager.run_scheduled_search()
 
 
 class TrackList(ft.ListView):
-    def __init__(self, view_config) -> None:
+    def __init__(self, view_config, audio_manager) -> None:
         super().__init__()
-        self.scroll = ft.ScrollMode.ADAPTIVE
-        self.controls = [
-            TrackItem(
-                Track.from_file(
-                    "/home/ice424/Music/Prefer not to say/strangers once again - Tanger, Treb, Ofir Tabakov.flac",
-                ),
-                view_config,
-            )
-        ]
-
+        self.audio_manager = audio_manager
+        self.view_config = view_config
+        self.scroll = ft.ScrollMode.ALWAYS
+        self.controls = []
+        self.spacing = 5
+        self.expand = True
+        
+    def update_list(self, track_list: list[Track]):
+        self.controls = []
+        for track in track_list:
+            self.controls.append(TrackItem(track, self.view_config, self.audio_manager))
 
 class TrackItem(ft.Container):
-    def __init__(self, track: Track, view_config) -> None:
+    def __init__(self, track: Track, view_config, audio_manager:AudioManager) -> None:
         super().__init__()
         self.track = track
-        view_config = ["cover_image", "title_artist"]
-
-        self.main_row = ft.Row()
+        self.audio_manager = audio_manager
+        view_config = ["cover_image", "title_artist", "album", "duration"] #temp
+        self.ink=True
+        self.on_click = self.choose_track
+        self.row = ft.Row()
+        self.padding = 5
+        self.border_radius = 6.5
+        self.margin = ft.Margin(0,0,20,0)
         for view in view_config:
-            self.main_row.controls.append(views_map[view](track))
+            self.row.controls.append(views_map[view](track))
 
-        self.content = self.main_row
+        self.content = self.row
+    def choose_track(self):
+        restart = False
+        if self.audio_manager.is_playing:
+            self.audio_manager.pause()
+            restart = True
+        self.audio_manager.load_track(self.track)
+        
+        if restart:
+            self.audio_manager.play()
+            
+        
 
 
 class CoverImage(ft.Image):
@@ -87,6 +107,7 @@ class CoverImage(ft.Image):
                 height=50,
                 border_radius=6)
         else:
+            
             super().__init__(
                 '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-music-icon lucide-music"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>',
                 width=50,
@@ -96,8 +117,9 @@ class CoverImage(ft.Image):
 
 
 class TitleArtist(ft.Column):
-    def __init__(self, track: Track) -> None:
+    def __init__(self, track: Track, expand=True) -> None:
         super().__init__()
+        self.expand= 8
         SongName = ft.Text(
             str(track.title),
             weight=ft.FontWeight.BOLD,
@@ -113,22 +135,38 @@ class TitleArtist(ft.Column):
         )
         self.controls = [SongName, ArtistName]
 
+class Duration(ft.Text):
+    def __init__(self, track: Track) -> None:
+        super().__init__()
+        self.expand= 1
+        self.max_lines = 1
+        self.text_align = ft.TextAlign.RIGHT
+        total_mins, total_secs = divmod(int(track.duration), 60)
+        self.value = f"{total_mins:02}:{total_secs:02}"
 
+class Album(ft.Text):
+    
+    def __init__(self, track: Track) -> None:
+        super().__init__()
+        self.expand= 5
+        self.value = str(track.album)
+        self.overflow = ft.TextOverflow.ELLIPSIS
 views_map = {
     "cover_image": CoverImage,
     "track_number": "",
     "title": "",
     "title_artist": TitleArtist,
-    "album": "",
-    "duration": "",
+    "album": Album,
+    "duration": Duration,
     "add_playlist": "",
     "add_queue": "",
 }
 
 
 class Header(ft.Container):
-    def __init__(self, view, library_manager) -> None:
+    def __init__(self, search_manager: SearchManager) -> None:
         super().__init__()
+        self.search_manager = search_manager
         self.sort_mode = "Title"
         list_view_button = ft.IconButton(icon=ft.Icons.VIEW_HEADLINE)
         grid_view_button = ft.IconButton(icon=ft.Icons.GRID_VIEW_ROUNDED)
@@ -154,7 +192,7 @@ class Header(ft.Container):
             ],
             menu_position=ft.PopupMenuPosition.UNDER,
         )
-        self.search_bar = search_bar(self, view, library_manager)
+        self.search_bar = search_bar(search_manager)
 
         self.row = ft.Row(
             alignment=ft.MainAxisAlignment.END,
@@ -164,17 +202,15 @@ class Header(ft.Container):
         self.content = self.row
 
     def change_sort_mode(self, mode=""):
-        self.sort_mode = mode
+        self.search_manager.sort_mode = mode
         self.button_label.value = mode
 
 
 class search_bar(ft.Container):
-    def __init__(self, header, view, library_manager) -> None:
-        self.view = view
-        self.library_manager: LibraryManager = library_manager
+    def __init__(self, search_manager:SearchManager ) -> None:
         super().__init__()
         search_icon = ft.Icon(ft.Icons.SEARCH)
-        self.header = header
+        self.search_manager = search_manager
         self.search_visible = False
         self.padding = 8
         self.search_box = ft.TextField(
@@ -227,9 +263,30 @@ class search_bar(ft.Container):
         self.page.update()
 
     def run_search(self, search: ft.Event[ft.TextField]):
-        print(search)
+        self.search_manager.run_search(str(search.data))
 
-        if self.view.db_available:
-            print(self.library_manager.get_tracks(search.data, "album"))
+        
 
         # await self.search_box.focus()
+
+class SearchManager():
+    def __init__(self, view, library_manager) -> None:
+        self.current_tracks = []
+        self.scheduled_search = ""
+        self.last_search = ""
+        self.library_manager = library_manager
+        self.sort_mode = "Title"
+        self.view: View = view
+        
+    def run_search(self, search:str):
+        if self.view.db_available:
+            self.last_search = search
+            self.current_tracks = self.library_manager.get_tracks(search, "album")
+            self.view.track_list.update_list(self.current_tracks)
+        else:
+            self.scheduled_search = search
+
+        
+    def run_scheduled_search(self):
+        self.run_search(self.scheduled_search)
+        

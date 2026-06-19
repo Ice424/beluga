@@ -193,7 +193,7 @@ class Track:
             duration=row.get("duration"),
             tracknumber=row.get("track_number"),
             discnumber=row.get("disc_number"),
-            cover_path= cls.COVER_CACHE / f"{row.get("cover_hash")}.jpg",
+            cover_path= cls.COVER_CACHE / f"{row.get("cover_hash")}.jpg" if row.get("cover_hash") != "" else "",
             cover_hash=row.get("cover_hash"),
             file_hash=row.get("hash"),
             
