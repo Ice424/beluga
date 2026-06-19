@@ -35,11 +35,13 @@ class Main:
         
         self.playbar = Playbar(page, self.audio)
 
+        self.track_view = TrackView(self.library)
+
         self.showing_dialog = False
         self.page.window.prevent_close = True
         self.page.window.on_event = self.window_event
 
-        page.run_task(self.library.scan_folder, "/home/ice424/Music", observer=self)
+        page.run_task(self.library.scan_folder, "/home/ice424/Music", observers=[self, self.track_view])
         page.run_task(self.presance.update_loop)
         
         self.build_ui()
@@ -90,7 +92,7 @@ class Main:
                            ],
                         ),
                         ft.VerticalDivider(width=1),
-                        TrackView(self.library)
+                        
                     ],
                 ),
             )

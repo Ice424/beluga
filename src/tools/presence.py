@@ -97,27 +97,30 @@ class PresenceManager:
                 self.end = self.start + int(self.audio_manager.get_duration())
             except FileNotFoundError:
                 self.is_playing = False
+            try:
+                if self.is_playing:
 
-            if self.is_playing:
-
-                await self.RPC.update(
-                    activity_type=ActivityType.LISTENING,
-                    status_display_type=StatusDisplayType.DETAILS,
-                    details=self.track_title,
-                    state=self.track_artist,
-                    large_url="https://github.com/Ice424/beluga",
-                    large_image=self.cover_url,
-                    start=int(self.start),
-                    end=int(self.end),
-                )
-            else:
-                await self.RPC.update(
-                    activity_type=ActivityType.LISTENING,
-                    status_display_type=StatusDisplayType.DETAILS,
-                    details=self.track_title,
-                    state=self.track_artist,
-                    large_url="https://github.com/Ice424/beluga",
-                    large_image=self.cover_url,
-                    start=None,
-                    end=None,
-                )
+                    await self.RPC.update(
+                        activity_type=ActivityType.LISTENING,
+                        status_display_type=StatusDisplayType.DETAILS,
+                        details=self.track_title,
+                        state=self.track_artist,
+                        large_url="https://github.com/Ice424/beluga",
+                        large_image=self.cover_url,
+                        start=int(self.start),
+                        end=int(self.end),
+                    )
+                else:
+                    await self.RPC.update(
+                        activity_type=ActivityType.LISTENING,
+                        status_display_type=StatusDisplayType.DETAILS,
+                        details=self.track_title,
+                        state=self.track_artist,
+                        large_url="https://github.com/Ice424/beluga",
+                        large_image=self.cover_url,
+                        start=None,
+                        end=None,
+                    )
+            except RuntimeError:
+                pass
+            

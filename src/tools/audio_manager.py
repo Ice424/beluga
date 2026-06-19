@@ -28,7 +28,7 @@ class AudioManager:
         
         events = self.player.event_manager()
 
-        events.event_attach(vlc.EventType.MediaPlayerEndReached,self._on_track_end)
+        events.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_track_end)
 
     def subscribe(self, observer):
         self._observers.append(observer)
@@ -36,6 +36,8 @@ class AudioManager:
     def _on_track_end(self, event):
         self.is_playing = False
 
+        print("Stopped")
+        
         self._notify(
             "state_change",
             is_playing=False
@@ -64,6 +66,22 @@ class AudioManager:
         self.player.set_media(self.media)
         
         self.audio_file = file
+        
+        self.player.play()
+
+        self.player.get_state()
+        while self.player.get_state() in (
+             vlc.State(1),
+             vlc.State(2),
+             vlc.State(0)
+        ):
+            self.player.get_state()
+            pass
+        
+        
+        self.player.pause()
+        self.player.set_time(0)
+        
         print(self.track)
         self._notify("track_change", track=self.track)
 
@@ -84,9 +102,9 @@ class AudioManager:
 
         self.player.get_state()
         while self.player.get_state() in (
-            vlc.State(1),
-            vlc.State(2),
-            vlc.State(0)
+             vlc.State(1),
+             vlc.State(2),
+             vlc.State(0)
         ):
             self.player.get_state()
             pass
@@ -108,7 +126,8 @@ class AudioManager:
     def toggle_playback(self) -> bool:
         """Play or pause the audio."""
         self.test_file()
-
+        if self.player.get_state() in (vlc.State(6),vlc.State(5),vlc.State(0)):
+            self.load_track(self.track)
         if self.is_playing:
             self.player.pause()
             self.is_playing = False
@@ -135,6 +154,9 @@ class AudioManager:
 
     def set_position(self, seconds: float):
         self.test_file()
+        if self.player.get_state() in (vlc.State(6),vlc.State(5),vlc.State(0)):
+            self.play()
+            
         self.player.set_time(int(seconds * 1000))
         self._notify("position_change", position=seconds)
         
