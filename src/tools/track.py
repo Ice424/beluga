@@ -337,8 +337,7 @@ class Track:
 
     def __repr__(self):
         return (
-            f"<Track title={self.title!r} artist={self.artist!r} "
-            f"album={self.album!r} duration={self.duration:.1f}s>"
+            f"<Track title={self.title!r} artist={self.artist!r} album={self.album!r} duration={self.duration:.1f}s>"
         )
 
     def generate_chromaprint(self):

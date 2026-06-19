@@ -134,9 +134,18 @@ class LibraryManager:
             FOREIGN KEY(track_id) REFERENCES tracks(id) ON DELETE CASCADE
             );
             """)
+        self.cur.execute("""
+            CREATE VIRTUAL TABLE track_search USING fts5(
+                track_id UNINDEXED,
+                title,
+                album,
+                artists
+            );
+            """)
+        
         self.conn.commit()
 
-    async def scan_folder(self, folder: str, observer):
+    async def scan_folder(self, folder: str, observers: list):
         loop = asyncio.get_running_loop()
         music_ext = {".flac", ".mp3", ".m4a", ".ogg", ".wav"}
         self.conn.execute("BEGIN")
@@ -149,7 +158,7 @@ class LibraryManager:
 
         self.conn.commit()
 
-        if observer:
+        for observer in observers:
 
             getattr(observer, "on_library_loaded")()
 
@@ -175,6 +184,51 @@ class LibraryManager:
         print("Updated Chromaprints")
         if observer and alert:
             getattr(observer, "on_fingerprints_loaded")()
+    
+    def update_search_index(self, track_id: int):
+        self.cur.execute(
+            """
+            DELETE FROM track_search
+            WHERE track_id = ?
+            """,
+            (track_id,),
+        )
+
+        row = self.cur.execute(
+            """
+            SELECT
+                t.id,
+                t.title,
+                COALESCE(al.title, '') AS album,
+                COALESCE(GROUP_CONCAT(a.name, '||'), '') AS artists
+            FROM tracks t
+            LEFT JOIN albums al ON t.album_id = al.id
+            LEFT JOIN track_artists ta ON ta.track_id = t.id
+            LEFT JOIN artists a ON a.id = ta.artist_id
+            WHERE t.id = ?
+            GROUP BY t.id
+            """,
+            (track_id,),
+        ).fetchone()
+
+        if row:
+            self.cur.execute(
+                """
+                INSERT INTO track_search(
+                    track_id,
+                    title,
+                    album,
+                    artists
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row["title"],
+                    row["album"],
+                    row["artists"],
+                ),
+            )
 
     def add_track(self, file_path: str):
         exists, file_hash = self.track_hash_exists(file_path)
@@ -231,6 +285,8 @@ class LibraryManager:
         for artist in artists:
                 artist_id = self.get_artist_id(artist, None)
                 self.link_track_artist(track_id, artist_id)
+        
+        self.update_search_index(track_id)
 
     def should_overwrite(self, track: "Track") -> int | None:
         row = self.cur.execute(
@@ -388,9 +444,9 @@ SET
     disc_number = ?,
     hash = ?,
     cover_id = ?,
-    modified_at = ?
-    recording_mbid = ?
-    track_mbid = ?
+    modified_at = ?,
+    recording_mbid = ?,
+    track_mbid = ?,
     acoustid = ?
 WHERE path = ?
             """,
@@ -437,62 +493,85 @@ WHERE path = ?
         return self.cur.lastrowid
 
     def get_tracks(
-        self, user_search="", sort_by="title", ascending=True
-    ) -> list[Track]:
-        valid_sorts = {
-            "title": "t.title",
-            "artist": "a.name",
-            "album": "al.title",
-            "duration": "t.duration",
-            "track": "t.track_number",
-        }
+    self,
+    user_search="",
+    ascending=True,
+    limit=100,
+    offset=0) -> list[Track]:
+        
 
-        order = valid_sorts.get(sort_by, "t.title")
         direction = "ASC" if ascending else "DESC"
-
+    
         search = user_search.strip()
-
-        query = f"""
-            SELECT 
+    
+        if search:
+            fts_query = " ".join(
+                f"{word}*"
+                for word in search.split()
+            )
+    
+            query = """
+            SELECT
                 t.*,
                 al.title AS album,
-                a.name AS artist,
-                c.cover_hash AS cover_hash
+                c.cover_hash,
+                ts.artists,
+                bm25(track_search) AS score
+            FROM track_search ts
+            JOIN tracks t ON t.id = ts.track_id
+            LEFT JOIN albums al ON al.id = t.album_id
+            LEFT JOIN covers c ON c.id = t.cover_id
+            WHERE track_search MATCH ?
+            ORDER BY score
+            LIMIT ? OFFSET ?
+            """
+    
+            rows = self.cur.execute(
+                query,
+                (fts_query, limit, offset)
+            ).fetchall()
+    
+        else:
+            query = f"""
+            SELECT
+                t.*,
+                al.title AS album,
+                c.cover_hash,
+                COALESCE(
+                    GROUP_CONCAT(a.name, '||'),
+                    'Unknown Artist'
+                ) AS artists
             FROM tracks t
-            LEFT JOIN albums al ON t.album_id = al.id
-            LEFT JOIN track_artists ta ON t.id = ta.track_id
-            LEFT JOIN artists a ON ta.artist_id = a.id
-            LEFT JOIN covers c ON t.cover_id = c.id
-            WHERE (
-                t.title LIKE ?
-                OR al.title LIKE ?
-                OR a.name LIKE ?
-            )
+            LEFT JOIN albums al ON al.id = t.album_id
+            LEFT JOIN covers c ON c.id = t.cover_id
+            LEFT JOIN track_artists ta ON ta.track_id = t.id
+            LEFT JOIN artists a ON a.id = ta.artist_id
             GROUP BY t.id
-            ORDER BY {order} COLLATE NOCASE {direction}
-        """
-
-        search_param = f"%{search}%"
-
-        rows = self.cur.execute(
-            query, (search_param, search_param, search_param)
-        ).fetchall()
+            ORDER BY t.title COLLATE NOCASE {direction}
+            LIMIT ? OFFSET ?
+            """
+    
+            rows = self.cur.execute(query, (limit, offset)).fetchall()
+    
         tracks = []
+    
         for row in rows:
             data = dict(row)
-
-            artists = data.get("artists")
+    
+            artists = data.get("artists", "")
+    
             if artists:
                 data["artists"] = artists.split("||")
                 data["artist"] = data["artists"][0]
             else:
-                data["artists"] = [data["artist"]]
-
+                data["artists"] = ["Unknown Artist"]
+                data["artist"] = "Unknown Artist"
+    
             tracks.append(Track.from_db(data))
-
+    
         return tracks
-
-
+    
+    
 def hash_file(file_path, block_size=65536):
     h = hashlib.md5()
     size = os.path.getsize(file_path)
