@@ -7,6 +7,7 @@ import traceback
 
 from pathlib import Path
 from tools.track import Track
+from tools.fetch import GenIDs
 
 
 class LibraryManager:
@@ -162,8 +163,8 @@ class LibraryManager:
 
             getattr(observer, "on_library_loaded")()
 
-    async def update_fingerprints(self, folder: str, observer):
-        tracks = tuple(self.get_tracks())
+    async def update_fingerprints(self, folder: str, observers: list):
+        tracks = tuple(self.get_tracks(limit=-1)[0])
         alert = False
         for track in tracks:
             if not Path(
@@ -175,15 +176,17 @@ class LibraryManager:
                                  """,
                     (track.file_path,),
                 )
-            if not track.chromaprint and not track.acoustid:
+            if not track.chromaprint and not track.acoustid and not track.release_mbid:
                 alert = True
                 chromaprint = await asyncio.to_thread(track.generate_chromaprint)
                 self.add_chromaprint(chromaprint, track.file_hash)
+                #GenIDs(track, self)
 
         self.conn.commit()
         print("Updated Chromaprints")
-        if observer and alert:
+        for observer in observers:
             getattr(observer, "on_fingerprints_loaded")()
+
     
     def update_search_index(self, track_id: int):
         self.cur.execute(
@@ -232,9 +235,9 @@ class LibraryManager:
 
     def add_track(self, file_path: str):
         exists, file_hash = self.track_hash_exists(file_path)
-
+        
         track = Track.from_file(file_path)
-
+        
         if exists:
             return
 
@@ -243,7 +246,7 @@ class LibraryManager:
         artist_id = self.get_artist_id(track.artist, track.artist_mbid)
         artists = track.artists[1:]
         
-        album_id = self.get_album_id(track.album)
+        album_id = self.get_album_id(track.album, track.release_year, track.release_mbid, track.release_group_mbid)
         self.link_album_artist(album_id, artist_id)
         
         track_id = self.should_overwrite(track)
@@ -345,7 +348,7 @@ class LibraryManager:
 
         return self.cur.lastrowid
 
-    def get_album_id(self, album_name):
+    def get_album_id(self, album_name, year, release_mbid, release_group_mbid):
         if not album_name:
             album_name = "Unknown Album"
 
@@ -356,7 +359,7 @@ class LibraryManager:
         if row:
             return row[0]
 
-        self.cur.execute("INSERT INTO albums(title) VALUES (?)", (album_name,))
+        self.cur.execute("INSERT INTO albums(title, year, release_mbid, release_group_mbid) VALUES (?,?,?,?)", (album_name, year, release_mbid, release_group_mbid,))
 
         return self.cur.lastrowid
 
@@ -497,7 +500,7 @@ WHERE path = ?
     user_search="",
     ascending=True,
     limit=100,
-    offset=0) -> list[Track]:
+    offset=0) -> tuple[list[Track], int]:
         
 
         direction = "ASC" if ascending else "DESC"
@@ -516,7 +519,8 @@ WHERE path = ?
                 al.title AS album,
                 c.cover_hash,
                 ts.artists,
-                bm25(track_search) AS score
+                bm25(track_search) AS score,
+                al.release_mbid
             FROM track_search ts
             JOIN tracks t ON t.id = ts.track_id
             LEFT JOIN albums al ON al.id = t.album_id
@@ -530,6 +534,16 @@ WHERE path = ?
                 query,
                 (fts_query, limit, offset)
             ).fetchall()
+            
+            self.cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM track_search
+                WHERE track_search MATCH ?
+                """,
+                (fts_query,)
+            )
+            total = self.cur.fetchone()[0]
     
         else:
             query = f"""
@@ -540,7 +554,8 @@ WHERE path = ?
                 COALESCE(
                     GROUP_CONCAT(a.name, '||'),
                     'Unknown Artist'
-                ) AS artists
+                ) AS artists,
+                al.release_mbid
             FROM tracks t
             LEFT JOIN albums al ON al.id = t.album_id
             LEFT JOIN covers c ON c.id = t.cover_id
@@ -552,12 +567,18 @@ WHERE path = ?
             """
     
             rows = self.cur.execute(query, (limit, offset)).fetchall()
+            self.cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM track_search
+                """,
+            )
+            total = self.cur.fetchone()[0]
     
         tracks = []
     
         for row in rows:
             data = dict(row)
-    
             artists = data.get("artists", "")
     
             if artists:
@@ -569,8 +590,28 @@ WHERE path = ?
     
             tracks.append(Track.from_db(data))
     
-        return tracks
+        return (tracks, total)
     
+    def get_cover_url(self, track:Track) -> str | None:
+        query = """SELECT c.image_url
+        FROM tracks t
+        JOIN covers c ON t.cover_id = c.id
+        WHERE t.path = ?"""
+  
+        
+        row = self.cur.execute(query, (track.file_path,)).fetchone()
+        return dict(row).get("image_url")
+    
+    def set_cover_url(self, track:Track, cover_url):
+        query = """UPDATE covers
+        SET image_url = ?
+        WHERE id = (
+            SELECT cover_id
+            FROM tracks
+            WHERE path = ?
+        )"""
+        self.cur.execute(query, (cover_url, track.file_path, ))
+        self.conn.commit()
     
 def hash_file(file_path, block_size=65536):
     h = hashlib.md5()

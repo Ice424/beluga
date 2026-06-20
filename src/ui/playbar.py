@@ -285,7 +285,9 @@ class Playbar(ft.Row):
             self.SongInfo.SongName.value = str(track.title)
             self.SongInfo.ArtistName.value = str(track.artist)
             self.SongInfo.AlbumName.value = str(track.album)
-            self.SongInfo.songCover.src = str(track.cover_path)
+            if track.cover_path:
+                self.SongInfo.songCover.src = str(track.cover_path)
+            
             self.SongInfo.update()
             self.dur = self.audio.get_duration()
             if  self.update_task.done:

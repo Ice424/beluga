@@ -20,7 +20,7 @@ class PresenceManager:
         self.start = int(time.time())
         self.audio_manager = audio_manager
         self.track_title = "Not Playing"
-        self.track_artist = "Beluga"
+        self.track_artists = ["Beluga"]
         self.cover_url = ""
         self.track_duration = 0
         self.end = +self.start + 999
@@ -33,7 +33,7 @@ class PresenceManager:
             self.track_artist = audio_manager.track.artists
             self.end = self.start + int(audio_manager.track.duration)
 
-            GetCover(audio_manager.track, self)
+            GetCover(audio_manager.track, self, self.audio_manager.page.library)
 
     async def update_loop(self):
         attempts = 0
@@ -68,15 +68,15 @@ class PresenceManager:
             await asyncio.sleep(15)
 
     def on_track_change(self, track: TR):
-        
         if track and self.connected:
             self.track_duration = track.duration
             self.track_title = track.title
-            self.track_artist = track.artist
+            self.track_artists = track.artists
             self.start = int(time.time())
             self.end = self.start + int(self.track_duration)
 
-            GetCover(track, self)
+            GetCover(track, self, self.audio_manager.page.library)
+            
             asyncio.create_task(self.update())
 
     def on_position_change(self, position):
@@ -104,8 +104,7 @@ class PresenceManager:
                         activity_type=ActivityType.LISTENING,
                         status_display_type=StatusDisplayType.DETAILS,
                         details=self.track_title,
-                        state=self.track_artist,
-                        large_url="https://github.com/Ice424/beluga",
+                        state=", ".join(self.track_artists),
                         large_image=self.cover_url,
                         start=int(self.start),
                         end=int(self.end),
@@ -115,8 +114,7 @@ class PresenceManager:
                         activity_type=ActivityType.LISTENING,
                         status_display_type=StatusDisplayType.DETAILS,
                         details=self.track_title,
-                        state=self.track_artist,
-                        large_url="https://github.com/Ice424/beluga",
+                        state=", ".join(self.track_artists),
                         large_image=self.cover_url,
                         start=None,
                         end=None,

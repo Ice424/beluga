@@ -41,7 +41,7 @@ class View(ft.Column):
         self.search_manager = SearchManager(self, self.library)
         self.expand = True
         self.header = Header(self.search_manager)
-        self.track_list = TrackList(view_config, audio_manager)
+        self.track_list = TrackList(view_config, audio_manager, self.search_manager)
         self.controls = [self.header, self.track_list]
 
         self.db_available = db_available
@@ -52,10 +52,13 @@ class View(ft.Column):
         self.db_available = True
         
         self.search_manager.run_scheduled_search()
+    
+    def on_fingerprints_loaded(self):
+        self.search_manager.run_last_search()
 
 
 class TrackList(ft.ListView):
-    def __init__(self, view_config, audio_manager) -> None:
+    def __init__(self, view_config, audio_manager:AudioManager, search_manager: SearchManager) -> None:
         super().__init__()
         self.audio_manager = audio_manager
         self.view_config = view_config
@@ -63,11 +66,31 @@ class TrackList(ft.ListView):
         self.controls = []
         self.spacing = 5
         self.expand = True
+        self.on_scroll = self.handle_scroll
+        self.search_manager = search_manager
+        self.build_controls_on_demand = True
+        self.first_item_prototype = True 
+        
         
     def update_list(self, track_list: list[Track]):
         self.controls = []
         for track in track_list:
             self.controls.append(TrackItem(track, self.view_config, self.audio_manager))
+        self.update()
+    def add_tracks(self, track_list):
+        for track in track_list:
+            self.controls.append(TrackItem(track, self.view_config, self.audio_manager))
+        self.update()
+        
+    def handle_scroll(self, e:ft.Event[ft.ListView]):
+        scroll_percent = (e.pixels/e.max_scroll_extent)*100
+        
+        if scroll_percent == 100:
+            print("start Query")
+            self.search_manager.get_more_tracks()
+            
+        
+    
 
 class TrackItem(ft.Container):
     def __init__(self, track: Track, view_config, audio_manager:AudioManager) -> None:
@@ -86,14 +109,11 @@ class TrackItem(ft.Container):
 
         self.content = self.row
     def choose_track(self):
-        restart = False
         if self.audio_manager.is_playing:
             self.audio_manager.pause()
-            restart = True
         self.audio_manager.load_track(self.track)
         
-        if restart:
-            self.audio_manager.play()
+        self.audio_manager.play()
             
         
 
@@ -263,30 +283,51 @@ class search_bar(ft.Container):
         self.page.update()
 
     def run_search(self, search: ft.Event[ft.TextField]):
+    
         self.search_manager.run_search(str(search.data))
+
 
         
 
         # await self.search_box.focus()
 
 class SearchManager():
-    def __init__(self, view, library_manager) -> None:
+    def __init__(self, view, library_manager: LibraryManager) -> None:
+        self._search_task = None
+        self._debounce_delay = 0.3
         self.current_tracks = []
         self.scheduled_search = ""
         self.last_search = ""
         self.library_manager = library_manager
         self.sort_mode = "Title"
         self.view: View = view
+        self._last_queued_search = None
+
         
     def run_search(self, search:str):
+        self.query_running = True
         if self.view.db_available:
             self.last_search = search
-            self.current_tracks = self.library_manager.get_tracks(search, "album")
+            self.current_tracks, self.total_tracks = self.library_manager.get_tracks(search, limit=-1)
             self.view.track_list.update_list(self.current_tracks)
         else:
             self.scheduled_search = search
 
+
+    def get_more_tracks(self):
+ 
+        if len(self.current_tracks) == self.total_tracks:
+            return
+        print(self.total_tracks, len(self.current_tracks))
+        new_tracks, _ = self.library_manager.get_tracks(self.last_search, offset= len(self.current_tracks))
+        self.current_tracks += new_tracks
+        self.view.track_list.add_tracks(self.current_tracks)
+
+        
         
     def run_scheduled_search(self):
         self.run_search(self.scheduled_search)
+    
+    def run_last_search(self):
+        self.run_search(self.last_search)
         

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from mutagen import File
 from mutagen.flac import FLAC
-from mutagen.id3 import APIC, ID3
+from mutagen.id3 import APIC, ID3, ID3TimeStamp
 from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 
@@ -173,6 +173,10 @@ class Track:
         track.file_size = stat.st_size
         track.modified_at = int(stat.st_mtime)
        
+        if isinstance(track.release_year, ID3TimeStamp):
+            track.release_year = track.release_year.text
+
+
         #COVER 
         track.cover_path, track.cover_hash = track._extract_cover(audio)
         if not track.title:
@@ -189,6 +193,7 @@ class Track:
             file_path=row["path"],
             title=row.get("title"),
             artist=row.get("artist"),
+            artists=[row.get("artist")],
             album=row.get("album"),
             duration=row.get("duration"),
             tracknumber=row.get("track_number"),
@@ -200,7 +205,9 @@ class Track:
             chromaprint=row.get("chromaprint"),
             recording_mbid = row.get("recording_mbid"),
             track_mbid=row.get("track_mbid"),
-            acoustid =row.get("acoustid")
+            acoustid =row.get("acoustid"),
+            
+            release_mbid= row.get("release_mbid")
             
             
         )

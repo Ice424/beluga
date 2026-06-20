@@ -10,7 +10,7 @@ from tools.library_manager import LibraryManager
 from tools.presence import PresenceManager
 
 from ui.playbar import Playbar
-from ui.tracks import View
+from ui.views import View
 
 
 if "linux" in platform: 
@@ -46,10 +46,8 @@ class Main:
         
         self.build_ui()
         
-        #self.audio.load_file("/home/ice424/Music/Prefer not to say/depressed hermit girl touches grass - Tanger, ISSBROKIE.flac")
         if LINUX:
             mpris = MprisController(self.audio)
-            mpris.on_track_change(self.audio.track)
 
     def sidebar_tab(self, icon: ft.IconData, title: str):
         
@@ -136,11 +134,11 @@ class Main:
 
     def on_library_loaded(self):
         self.page.show_dialog(ft.SnackBar(ft.Text("Refreshed Library")))
-        track = self.library.get_tracks(user_search="Head Up")[0]
+        track = self.library.get_tracks(user_search="Head Up")[0][0]
         
         self.audio.load_track(track)
         
-        asyncio.create_task(self.library.update_fingerprints("/home/ice424/Music", observer=self)) 
+        asyncio.create_task(self.library.update_fingerprints("/home/ice424/Music", observers=[self, self.track_view])) 
 
         
     def on_fingerprints_loaded(self):

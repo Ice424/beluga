@@ -3,7 +3,7 @@ name = "beluga"
 version = "0.1.0"
 description = ""
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 authors = [
     { name = "Ice424", email = "you@example.com" }
 ]
@@ -21,7 +21,9 @@ dependencies = [
     "mpris_server",
     "pypresence",
     "chromaprint",
-    "audioread"
+    "audioread",
+    "certifi"
+
 ]
 
 [dependency-groups]
