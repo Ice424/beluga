@@ -25,7 +25,7 @@ dependencies = [
 
 ]
 [project.optional-dependencies]
-linux = "mpris_server==0.9.6",
+linux = ["mpris_server==0.9.6"]
 
 [dependency-groups]
 dev = [
