@@ -10,7 +10,6 @@ authors = [
 dependencies = [
     "flet>=0.85.0",
     "python-vlc",
-    "mpris_server",
     "mutagen",
     "aiohttp",
     "asyncio",
