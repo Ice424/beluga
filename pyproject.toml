@@ -18,7 +18,7 @@ dependencies = [
     "pathlib",
     "aiohttp",
     "pyacoustid",
-    "mpris_server=0.9.6",
+    "mpris_server==0.9.6",
     "pypresence",
     "chromaprint",
     "audioread",
