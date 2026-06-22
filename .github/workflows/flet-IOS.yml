@@ -29,4 +29,4 @@ jobs:
         pip install flake8 pytest
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Build Flet
-      run: flet build ipa
+      run: flet build ipa --yes
