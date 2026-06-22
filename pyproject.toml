@@ -18,13 +18,14 @@ dependencies = [
     "pathlib",
     "aiohttp",
     "pyacoustid",
-    "mpris_server=0.9.6",
     "pypresence",
     "chromaprint",
     "audioread",
     "certifi"
 
 ]
+[project.optional-dependencies]
+linux = "mpris_server=0.9.6",
 
 [dependency-groups]
 dev = [
@@ -32,6 +33,7 @@ dev = [
     "flet-desktop>=0.84.0",
     "flet-web>=0.84.0",
 ]
+
 
 [tool.flet]
 desktop_flavor = "light"    # Change to "full" to use flet-audio and flet-video

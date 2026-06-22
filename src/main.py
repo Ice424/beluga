@@ -4,7 +4,7 @@ import os
 from sys import platform
 import asyncio
 
-from tools.mpris import MprisController
+
 from tools.audio_manager import AudioManager
 from tools.library_manager import LibraryManager
 from tools.presence import PresenceManager
@@ -16,6 +16,8 @@ from ui.views import View
 if "linux" in platform: 
     LINUX = True
     os.environ["FPCALC"] = os.path.abspath("./src/assets/bin/fpcalc")
+    from tools.mpris import MprisController
+    
 elif platform == "darwin":
     exit()
 elif platform == "win32":
