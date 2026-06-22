@@ -15,7 +15,7 @@ permissions:
 jobs:
   build:
 
-    runs-on: macOS
+    runs-on: macos-lates
 
     steps:
     - uses: actions/checkout@v4
