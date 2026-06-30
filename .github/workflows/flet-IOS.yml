@@ -30,9 +30,19 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Build Flet
       run: flet build ipa --yes
+      
+    - name: Convert to IPA
+      run: |
+        mv beluga.xcarchive/Products/Applications beluga.xcarchive/Products/Payload
+        cd beluga.xcarchive/Products/
+        zip -r beluga.zip Payload
+        mv beluga.zip beluga.ipa
+        cd ~
+        ls
+      
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v7.0.1
       with:
-        path: build/ipa/
+        path: beluga.xcarchive/Products/beluga.ipa
   
       
