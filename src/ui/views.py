@@ -21,7 +21,7 @@ views = Literal[
 ]
 
 
-class View(ft.Column):
+class TrackView(ft.Column):
     def __init__(
         self,
         library_manager: "LibraryManager",
@@ -54,6 +54,7 @@ class View(ft.Column):
         self.search_manager.run_scheduled_search()
     
     def on_fingerprints_loaded(self):
+        # TODO causes massive lag, fix
         self.search_manager.run_last_search()
 
 
@@ -66,7 +67,7 @@ class TrackList(ft.ListView):
         self.controls = []
         self.spacing = 5
         self.expand = True
-        self.on_scroll = self.handle_scroll
+        #self.on_scroll = self.handle_scroll
         self.search_manager = search_manager
         self.build_controls_on_demand = True
         self.first_item_prototype = True 
@@ -81,13 +82,6 @@ class TrackList(ft.ListView):
         for track in track_list:
             self.controls.append(TrackItem(track, self.view_config, self.audio_manager))
         self.update()
-        
-    def handle_scroll(self, e:ft.Event[ft.ListView]):
-        scroll_percent = (e.pixels/e.max_scroll_extent)*100
-        
-        if scroll_percent == 100:
-            print("start Query")
-            self.search_manager.get_more_tracks()
             
         
     
@@ -193,37 +187,15 @@ class Header(ft.Container):
 
         self.button_label = ft.Text(self.sort_mode)
 
-        sort_view = ft.PopupMenuButton(
-            content=ft.Container(
-                padding=10,
-                border_radius=70,
-                content=ft.Row(controls=[ft.Icon(ft.Icons.SORT), self.button_label]),
-            ),
-            items=[
-                ft.PopupMenuItem(
-                    content="Title", on_click=lambda: self.change_sort_mode("Title")
-                ),
-                ft.PopupMenuItem(
-                    content="Artist", on_click=lambda: self.change_sort_mode("Artist")
-                ),
-                ft.PopupMenuItem(
-                    content="Album", on_click=lambda: self.change_sort_mode("Album")
-                ),
-            ],
-            menu_position=ft.PopupMenuPosition.UNDER,
-        )
+        
         self.search_bar = search_bar(search_manager)
 
         self.row = ft.Row(
             alignment=ft.MainAxisAlignment.END,
             height=70,
-            controls=[self.search_bar, list_view_button, grid_view_button, sort_view],
+            controls=[self.search_bar, list_view_button, grid_view_button],
         )
         self.content = self.row
-
-    def change_sort_mode(self, mode=""):
-        self.search_manager.sort_mode = mode
-        self.button_label.value = mode
 
 
 class search_bar(ft.Container):
@@ -300,19 +272,25 @@ class SearchManager():
         self.last_search = ""
         self.library_manager = library_manager
         self.sort_mode = "Title"
-        self.view: View = view
+        self.view: TrackView = view
         self._last_queued_search = None
+        self.search_task = None
 
         
     def run_search(self, search:str):
-        self.query_running = True
+        if self.search_task:
+            self.search_task.cancel()
+            self.search_task = asyncio.create_task(self._search(search))
+        else:
+            self.search_task = asyncio.create_task(self._search(search))
+        
+    async def _search(self, search):
         if self.view.db_available:
             self.last_search = search
             self.current_tracks, self.total_tracks = self.library_manager.get_tracks(search, limit=-1)
             self.view.track_list.update_list(self.current_tracks)
         else:
             self.scheduled_search = search
-
 
     def get_more_tracks(self):
  

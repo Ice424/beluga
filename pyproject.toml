@@ -43,3 +43,7 @@ copyright = "Copyright (C) 2023-2026 by Flet"
 
 [tool.flet.app]
 path = "src"
+
+[tool.flet.ios.info]
+LSSupportsOpeningDocumentsInPlace = True
+UIFileSharingEnabled = True

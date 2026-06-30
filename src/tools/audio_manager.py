@@ -175,7 +175,6 @@ class AudioManager:
     def set_volume(self, volume: int):
 
         self.player.audio_set_volume(volume)
-        self._notify("volume_change", volume=volume)
 
     def get_volume(self) -> int:
         volume = self.player.audio_get_volume()
@@ -183,5 +182,3 @@ class AudioManager:
 
     def stop(self):
         self.player.stop()
-
-## TODO i think VLC auto clears the player's media if it reaches the end of the track meaning that you cant seek back to a previous location
