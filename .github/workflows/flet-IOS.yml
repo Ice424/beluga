@@ -38,12 +38,11 @@ jobs:
         cd build/ipa/beluga.xcarchive/Products/
         zip -r beluga.zip Payload
         mv beluga.zip beluga.ipa
-        cd ~
         ls
       
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v7.0.1
       with:
-        path: beluga.xcarchive/Products/beluga.ipa
+        path: beluga.ipa
   
       
