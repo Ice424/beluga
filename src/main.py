@@ -43,6 +43,7 @@ class Main:
         self.build_ui()
 
         if config.LINUX:
+            from tools.mpris import MprisController
             mpris = MprisController(self.audio)
 
     class SidebarTab(ft.Container):
@@ -52,12 +53,14 @@ class Main:
             super().__init__()
             mapping = {
                 "Tracks": [0, TrackView],
-                "Albums": [0, TrackView],
-                "Artists": [0, TrackView],
-                "Playlists": [0, TrackView],
-                "Settings": [0, TrackView],
+                "Albums": [1, TrackView],
+                "Artists": [2, TrackView],
+                "Playlists": [3, TrackView],
+                "Settings": [4, TrackView],
             
             }
+            
+            
             self.index = mapping[title][0]
             self.main_class = main
             
@@ -73,6 +76,9 @@ class Main:
             self.on_click=self.clicked
             
             self.view = mapping[title][1]
+            
+            if self.main_class.current_page == self.index:
+                self.disabled = True
             
         def clicked(self):
             self.main_class.current_page = self.index
