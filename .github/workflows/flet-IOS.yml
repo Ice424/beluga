@@ -33,6 +33,7 @@ jobs:
       
     - name: Convert to IPA
       run: |
+        ls -R
         mv beluga.xcarchive/Products/Applications beluga.xcarchive/Products/Payload
         cd beluga.xcarchive/Products/
         zip -r beluga.zip Payload
