@@ -79,6 +79,7 @@ class Main:
             
             if self.main_class.current_page == self.index:
                 self.disabled = True
+                self.bgcolor = ft.Colors.SURFACE_BRIGHT
             
         def clicked(self):
             self.main_class.current_page = self.index
